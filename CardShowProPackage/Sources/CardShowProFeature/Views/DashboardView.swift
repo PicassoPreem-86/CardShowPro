@@ -243,8 +243,9 @@ struct QuickActionButton: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 80)
-            .background(Color(.systemGray6))
+            .background(Color(.systemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.05), radius: 5)
         }
         .buttonStyle(.plain)
     }
@@ -278,8 +279,9 @@ struct StatsCard: View {
             Spacer()
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.05), radius: 5)
     }
 }
 
@@ -321,7 +323,8 @@ struct TopItemCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.05), radius: 5)
     }
 }
