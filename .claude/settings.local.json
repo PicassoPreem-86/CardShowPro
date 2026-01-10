@@ -3,7 +3,9 @@
     "allow": [
       "WebSearch",
       "Bash(cloc:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:getcollectr.com)",
+      "WebFetch(domain:apps.apple.com)"
     ],
     "deny": [],
     "ask": []

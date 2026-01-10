@@ -145,6 +145,40 @@ final class NetworkService: Sendable {
         return try await performRequest(request, retryCount: retryCount)
     }
 
+    /// Perform a POST request with base64-encoded image (for Ximilar API)
+    func postBase64Image<T: Decodable>(
+        url: URL,
+        imageData: Data,
+        headers: [String: String] = [:],
+        retryCount: Int = 2
+    ) async throws -> T {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Add custom headers
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        // Encode image to base64
+        let base64String = imageData.base64EncodedString()
+
+        // Build request body with records array
+        let requestBody: [String: Any] = [
+            "records": [
+                [
+                    "_base64": base64String
+                ]
+            ]
+        ]
+
+        // Convert to JSON
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        return try await performRequest(request, retryCount: retryCount)
+    }
+
     /// Core request performer with retry logic
     private func performRequest<T: Decodable>(
         _ request: URLRequest,

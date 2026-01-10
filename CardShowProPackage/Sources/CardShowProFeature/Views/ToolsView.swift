@@ -20,19 +20,31 @@ struct ToolsView: View {
                         }
                         .buttonStyle(.plain)
 
-                        ToolRow(
-                            icon: "chart.line.uptrend.xyaxis",
-                            title: "Analytics",
-                            description: "View detailed sales and inventory analytics",
-                            color: .purple
-                        )
+                        NavigationLink {
+                            AdvancedAnalyticsView()
+                        } label: {
+                            ToolRow(
+                                icon: "chart.line.uptrend.xyaxis",
+                                title: "Advanced Analytics",
+                                description: "View detailed portfolio insights and trends",
+                                color: .purple,
+                                isComingSoon: false
+                            )
+                        }
+                        .buttonStyle(.plain)
 
-                        ToolRow(
-                            icon: "chart.bar.doc.horizontal.fill",
-                            title: "Grading ROI Calculator",
-                            description: "Calculate if grading is worth the cost",
-                            color: .yellow
-                        )
+                        NavigationLink {
+                            GradingROICalculatorView()
+                        } label: {
+                            ToolRow(
+                                icon: "chart.bar.doc.horizontal.fill",
+                                title: "Grading ROI Calculator",
+                                description: "Calculate if grading is worth the cost",
+                                color: .yellow,
+                                isComingSoon: false
+                            )
+                        }
+                        .buttonStyle(.plain)
 
                         ToolRow(
                             icon: "brain.head.profile",
@@ -44,19 +56,31 @@ struct ToolsView: View {
 
                     // Sales & Listing Tools
                     ToolSection(title: "Sales & Listings") {
-                        ToolRow(
-                            icon: "dollarsign.circle.fill",
-                            title: "Online Sales Calculator",
-                            description: "Calculate fees, shipping, and profit margins",
-                            color: .green
-                        )
+                        NavigationLink {
+                            SalesCalculatorView()
+                        } label: {
+                            ToolRow(
+                                icon: "dollarsign.circle.fill",
+                                title: "Sales Calculator",
+                                description: "Calculate fees, shipping, and profit margins",
+                                color: .green,
+                                isComingSoon: false
+                            )
+                        }
+                        .buttonStyle(.plain)
 
-                        ToolRow(
-                            icon: "square.and.pencil",
-                            title: "Listing Generator",
-                            description: "Auto-generate descriptions for listings",
-                            color: .indigo
-                        )
+                        NavigationLink {
+                            ListingGeneratorView()
+                        } label: {
+                            ToolRow(
+                                icon: "square.and.pencil",
+                                title: "Listing Generator",
+                                description: "Auto-generate descriptions for listings",
+                                color: .indigo,
+                                isComingSoon: false
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     // Organization Tools
@@ -68,12 +92,18 @@ struct ToolsView: View {
                             color: .orange
                         )
 
-                        ToolRow(
-                            icon: "person.2.fill",
-                            title: "Contacts",
-                            description: "Manage customers and vendor contacts",
-                            color: .blue
-                        )
+                        NavigationLink {
+                            ContactsView()
+                        } label: {
+                            ToolRow(
+                                icon: "person.2.fill",
+                                title: "Contacts",
+                                description: "Manage customers and vendor contacts",
+                                color: .blue,
+                                isComingSoon: false
+                            )
+                        }
+                        .buttonStyle(.plain)
 
                         ToolRow(
                             icon: "rectangle.stack.fill.badge.person.crop",

@@ -7,12 +7,28 @@ import SwiftUI
 @Observable
 final class CameraManager: NSObject, @unchecked Sendable {
     // MARK: - Camera Properties
-    private let captureSession = AVCaptureSession()
-    private var videoOutput = AVCaptureVideoDataOutput()
+    private nonisolated(unsafe) let captureSession = AVCaptureSession()
+    private nonisolated(unsafe) var videoOutput = AVCaptureVideoDataOutput()
+    private nonisolated(unsafe) var photoOutput = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "com.cardshowpro.camera")
     private var currentCamera: AVCaptureDevice?
 
+    // Photo capture state
+    private var photoContinuation: CheckedContinuation<UIImage, Error>?
+
+    // MARK: - Frame Throttling
+    private let frameThrottler = FrameThrottler(fps: 15.0)
+
     // MARK: - State
+    enum SessionState {
+        case notConfigured
+        case configuring
+        case configured
+        case running
+        case failed(Error)
+    }
+
+    var sessionState: SessionState = .notConfigured
     var previewLayer: AVCaptureVideoPreviewLayer?
     var isSessionRunning = false
     var authorizationStatus: AVAuthorizationStatus = .notDetermined
@@ -81,54 +97,99 @@ final class CameraManager: NSObject, @unchecked Sendable {
 
     // MARK: - Setup
     func setupCaptureSession() async {
-        guard authorizationStatus == .authorized else { return }
-
-        sessionQueue.sync {
-            captureSession.beginConfiguration()
-            captureSession.sessionPreset = .photo
-
-            // Add video input
-            guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-                captureSession.commitConfiguration()
-                return
+        guard authorizationStatus == .authorized else {
+            await MainActor.run {
+                sessionState = .failed(NSError(domain: "CameraManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Camera not authorized"]))
             }
-
-            do {
-                let input = try AVCaptureDeviceInput(device: camera)
-                if captureSession.canAddInput(input) {
-                    captureSession.addInput(input)
-                    currentCamera = camera
-                }
-            } catch {
-                print("Error setting up camera input: \(error)")
-                captureSession.commitConfiguration()
-                return
-            }
-
-            // Add video output
-            videoOutput.setSampleBufferDelegate(self, queue: sessionQueue)
-            videoOutput.alwaysDiscardsLateVideoFrames = true
-            videoOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ]
-
-            if captureSession.canAddOutput(videoOutput) {
-                captureSession.addOutput(videoOutput)
-            }
-
-            // Configure video connection
-            if let connection = videoOutput.connection(with: .video) {
-                if #available(iOS 17.0, *) {
-                    connection.videoRotationAngle = 90
-                } else {
-                    connection.videoOrientation = .portrait
-                }
-            }
-
-            captureSession.commitConfiguration()
+            return
         }
 
-        // Create preview layer
+        await MainActor.run {
+            sessionState = .configuring
+        }
+
+        // Run configuration on session queue
+        await withCheckedContinuation { continuation in
+            sessionQueue.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume()
+                    return
+                }
+
+                self.captureSession.beginConfiguration()
+                self.captureSession.sessionPreset = .photo
+
+                // Add video input
+                guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                    self.captureSession.commitConfiguration()
+                    Task { @MainActor in
+                        self.sessionState = .failed(NSError(domain: "CameraManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "Camera not available"]))
+                    }
+                    continuation.resume()
+                    return
+                }
+
+                do {
+                    let input = try AVCaptureDeviceInput(device: camera)
+                    if self.captureSession.canAddInput(input) {
+                        self.captureSession.addInput(input)
+                        Task { @MainActor in
+                            self.currentCamera = camera
+                        }
+                    }
+                } catch {
+                    print("Error setting up camera input: \(error)")
+                    self.captureSession.commitConfiguration()
+                    Task { @MainActor in
+                        self.sessionState = .failed(error)
+                    }
+                    continuation.resume()
+                    return
+                }
+
+                // Add video output
+                self.videoOutput.setSampleBufferDelegate(self, queue: self.sessionQueue)
+                self.videoOutput.alwaysDiscardsLateVideoFrames = true
+                self.videoOutput.videoSettings = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+                ]
+
+                if self.captureSession.canAddOutput(self.videoOutput) {
+                    self.captureSession.addOutput(self.videoOutput)
+                }
+
+                // Configure video connection
+                if let connection = self.videoOutput.connection(with: .video) {
+                    if #available(iOS 17.0, *) {
+                        connection.videoRotationAngle = 90
+                    } else {
+                        connection.videoOrientation = .portrait
+                    }
+                }
+
+                // Add photo output for high-quality capture
+                if self.captureSession.canAddOutput(self.photoOutput) {
+                    self.captureSession.addOutput(self.photoOutput)
+
+                    // Configure photo output for highest quality
+                    self.photoOutput.isHighResolutionCaptureEnabled = true
+                    if #available(iOS 17.0, *) {
+                        self.photoOutput.maxPhotoDimensions = camera.activeFormat.supportedMaxPhotoDimensions.first ?? CMVideoDimensions(width: 0, height: 0)
+                    }
+                }
+
+                self.captureSession.commitConfiguration()
+
+                // Configuration complete
+                Task { @MainActor in
+                    self.sessionState = .configured
+                }
+
+                continuation.resume()
+            }
+        }
+
+        // Create preview layer on main thread
         let preview = AVCaptureVideoPreviewLayer(session: captureSession)
         preview.videoGravity = .resizeAspectFill
         previewLayer = preview
@@ -143,6 +204,7 @@ final class CameraManager: NSObject, @unchecked Sendable {
                 captureSession.startRunning()
                 Task { @MainActor [weak self] in
                     self?.isSessionRunning = true
+                    self?.sessionState = .running
                 }
             }
         }
@@ -162,8 +224,40 @@ final class CameraManager: NSObject, @unchecked Sendable {
     }
 
     // MARK: - Manual Capture
-    func capturePhoto() -> UIImage? {
-        return lastCapturedImage
+    func capturePhoto() async throws -> UIImage {
+        return try await withCheckedThrowingContinuation { continuation in
+            // Store continuation for delegate callback
+            photoContinuation = continuation
+
+            // Create photo settings
+            let settings = AVCapturePhotoSettings()
+
+            // Use highest quality format available
+            if photoOutput.availablePhotoCodecTypes.contains(.hevc) {
+                settings.photoQualityPrioritization = .quality
+            }
+
+            // Disable flash for now (can be enabled later if needed)
+            if photoOutput.supportedFlashModes.contains(.off) {
+                settings.flashMode = .off
+            }
+
+            // Enable high-resolution capture
+            settings.isHighResolutionPhotoEnabled = true
+
+            // Capture photo on session queue
+            sessionQueue.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume(throwing: NSError(
+                        domain: "CameraManager",
+                        code: -3,
+                        userInfo: [NSLocalizedDescriptionKey: "CameraManager deallocated"]
+                    ))
+                    return
+                }
+                self.photoOutput.capturePhoto(with: settings, delegate: self)
+            }
+        }
     }
 
     // MARK: - Flash Control
@@ -212,22 +306,27 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        // Convert sample buffer to image
-        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        // Throttle to 15 FPS to reduce CPU usage
+        Task {
+            guard await frameThrottler.shouldProcess() else { return }
 
-        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-        let context = CIContext()
+            // Convert sample buffer to image
+            guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
-        let image = UIImage(cgImage: cgImage)
+            let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+            let context = CIContext()
 
-        // Update last captured image on main thread
-        Task { @MainActor in
-            self.lastCapturedImage = image
+            guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
+            let image = UIImage(cgImage: cgImage)
+
+            // Update last captured image on main thread
+            await MainActor.run {
+                self.lastCapturedImage = image
+            }
+
+            // Perform card detection
+            detectCard(in: imageBuffer)
         }
-
-        // Perform card detection
-        detectCard(in: imageBuffer)
     }
 
     // MARK: - Card Detection with Vision
@@ -271,5 +370,69 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
         try? handler.perform([request])
+    }
+}
+
+// MARK: - Photo Capture Delegate
+extension CameraManager: AVCapturePhotoCaptureDelegate {
+    nonisolated func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
+        // Handle errors
+        if let error = error {
+            Task { @MainActor in
+                self.photoContinuation?.resume(throwing: error)
+                self.photoContinuation = nil
+            }
+            return
+        }
+
+        // Extract image data
+        guard let imageData = photo.fileDataRepresentation(),
+              let image = UIImage(data: imageData) else {
+            Task { @MainActor in
+                self.photoContinuation?.resume(throwing: NSError(
+                    domain: "CameraManager",
+                    code: -4,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to convert photo to UIImage"]
+                ))
+                self.photoContinuation = nil
+            }
+            return
+        }
+
+        // Correct orientation
+        let orientedImage = image.fixedOrientation()
+
+        // Resume continuation with captured image
+        Task { @MainActor in
+            self.photoContinuation?.resume(returning: orientedImage)
+            self.photoContinuation = nil
+        }
+    }
+
+    nonisolated func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didCapturePhotoFor resolvedSettings: AVCaptureResolvedPhotoSettings
+    ) {
+        // Photo was captured, can add sound/haptic feedback here if needed
+    }
+}
+
+// MARK: - UIImage Orientation Fix
+private extension UIImage {
+    func fixedOrientation() -> UIImage {
+        // If image is already in correct orientation, return it
+        guard imageOrientation != .up else { return self }
+
+        // Create graphics context and draw image with correct orientation
+        UIGraphicsBeginImageContextWithOptions(size, false, scale)
+        draw(in: CGRect(origin: .zero, size: size))
+        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext() ?? self
+        UIGraphicsEndImageContext()
+
+        return normalizedImage
     }
 }

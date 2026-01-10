@@ -11,7 +11,6 @@ struct CameraView: View {
     @State private var selectedMode: ScanMode = .negotiator
     @State private var showSettings = false
     @State private var autoCapture = true
-    @State private var captureTimer: Timer?
 
     // Card recognition services
     @State private var recognitionService = CardRecognitionService.shared
@@ -28,11 +27,36 @@ struct CameraView: View {
     @State private var showPhotoPicker = false
 
     // Loading state
+    @State private var isInitializing = true
     @State private var isRecognizing = false
     @State private var loadingStatus = "Recognizing card..."
 
     // Success state
+    @State private var showSuccessAnimation = false
     @State private var showSessionSuccess = false
+
+    // Tutorial state
+    @State private var showTutorial = false
+    @State private var pulseButton = false
+
+    // Error state
+    @State private var showErrorOverlay = false
+    @State private var errorType: CameraError?
+    @State private var showCameraPermissionAlert = false
+
+    // Auto-capture state tracking
+    @State private var stableDetectionCount = 0
+    private let requiredStableFrames = 10 // At 15 FPS = ~0.67s
+
+    // Low light detection
+    @State private var lowConfidenceCount = 0
+    private let lowConfidenceThreshold = 100 // ~6.6s at 15 FPS
+
+    enum CameraError {
+        case cardNotFound
+        case lowLight
+        case cameraFailed
+    }
 
     var body: some View {
         ZStack {
@@ -60,26 +84,14 @@ struct CameraView: View {
             }
 
             // MARK: - Detection Overlay
-            if cameraManager.isCardDetected, let frame = cameraManager.detectedCardFrame {
-                GeometryReader { geometry in
-                    ZStack {
-                        // Background dimming
-                        BackgroundDimming(
-                            detectionFrame: frame,
-                            geometrySize: geometry.size
-                        )
-
-                        // Detection frame
-                        CardDetectionFrame(
-                            frame: frame,
-                            geometrySize: geometry.size,
-                            detectionState: cameraManager.detectionState
-                        )
-                    }
-                }
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+            GeometryReader { geometry in
+                MinimalDetectionFrame(
+                    state: detectionFrameState,
+                    geometrySize: geometry.size
+                )
             }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
 
             // MARK: - Main UI Overlay
             VStack(spacing: 0) {
@@ -137,19 +149,54 @@ struct CameraView: View {
                 Spacer()
             }
 
-            // MARK: - Loading Overlay
+            // MARK: - Initialization Loading
+            if isInitializing {
+                CleanLoadingView(status: "Initializing camera...")
+                    .transition(.opacity)
+            }
+
+            // MARK: - Recognition Loading
             if isRecognizing {
-                ScannerLoadingOverlay(status: loadingStatus)
+                CleanLoadingView(status: loadingStatus)
+                    .transition(.opacity)
+            }
+
+            // MARK: - Success Animation
+            if showSuccessAnimation {
+                QuickSuccessFeedback {
+                    handleSuccessAnimationComplete()
+                }
+                .transition(.opacity)
+            }
+
+            // MARK: - Error Overlay
+            if showErrorOverlay, let errorType = errorType {
+                SimpleErrorModal(
+                    errorType: mapToSimpleErrorType(errorType),
+                    onPrimaryAction: {
+                        handleErrorDismiss()
+                    },
+                    onSecondaryAction: shouldShowSecondaryAction(for: errorType) ? {
+                        handleSecondaryAction(for: errorType)
+                    } : nil
+                )
+                .transition(.opacity)
+            }
+
+            // MARK: - Tutorial Overlay
+            if showTutorial {
+                CleanTutorialOverlay {
+                    dismissTutorial()
+                }
+                .transition(.opacity)
             }
         }
         .statusBarHidden()
         .task {
-            cameraManager.startSession()
-            startAutoCapture()
+            await setupCamera()
         }
         .onDisappear {
             cameraManager.stopSession()
-            captureTimer?.invalidate()
         }
         .sheet(isPresented: $showSettings) {
             settingsSheet
@@ -182,6 +229,19 @@ struct CameraView: View {
                 showSessionSuccess = false
                 dismiss()
             }
+        }
+        .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("CardShowPro needs camera access to scan cards. Please enable it in Settings.")
+        }
+        .onChange(of: cameraManager.detectionState) { _, newState in
+            handleDetectionStateChange(newState)
         }
     }
 
@@ -317,6 +377,7 @@ struct CameraView: View {
                             .frame(width: 68, height: 68)
                     }
                 }
+                .scaleEffect(pulseButton ? 1.15 : 1.0)
 
                 // Done Button
                 Button {
@@ -417,24 +478,54 @@ struct CameraView: View {
     }
 
     // MARK: - Actions
-    private func startAutoCapture() {
-        guard autoCapture else { return }
+    private func setupCamera() async {
+        // Prepare haptic generators
+        HapticManager.shared.prepare()
 
-        // Check every 0.5s if card is ready to capture
-        // This gives user 1-2 seconds of "ready" state before auto-capture
-        captureTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            Task { @MainActor in
-                if self.cameraManager.detectionState == .readyToCapture,
-                   !self.scanSession.isProcessing {
-                    // Add small delay to prevent instant capture
-                    try? await Task.sleep(for: .seconds(1.0))
+        // Check camera permission
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
 
-                    // Re-check state after delay (card might have moved)
-                    if self.cameraManager.detectionState == .readyToCapture,
-                       !self.scanSession.isProcessing {
-                        self.performCapture()
-                    }
-                }
+        switch status {
+        case .authorized:
+            await configureAndStartCamera()
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(for: .video)
+            if granted {
+                await configureAndStartCamera()
+            } else {
+                showCameraPermissionAlert = true
+                HapticManager.shared.error()
+            }
+        case .denied, .restricted:
+            showCameraPermissionAlert = true
+            HapticManager.shared.error()
+        @unknown default:
+            showCameraPermissionAlert = true
+            HapticManager.shared.error()
+        }
+    }
+
+    private func configureAndStartCamera() async {
+        await cameraManager.setupCaptureSession()
+        cameraManager.startSession()
+
+        // Wait for camera to be ready
+        try? await Task.sleep(for: .seconds(0.5))
+
+        // Hide initialization loading
+        withAnimation(.easeOut(duration: 0.3)) {
+            isInitializing = false
+        }
+
+        // Haptic: Camera ready
+        HapticManager.shared.light()
+
+        // Check if tutorial should be shown
+        let hasSeenTutorial = UserDefaults.standard.bool(forKey: "hasSeenCameraTutorial")
+        if !hasSeenTutorial {
+            try? await Task.sleep(for: .seconds(0.5))
+            withAnimation(.easeIn(duration: 0.3)) {
+                showTutorial = true
             }
         }
     }
@@ -444,28 +535,31 @@ struct CameraView: View {
     }
 
     private func performCapture() {
-        guard let image = cameraManager.capturePhoto() else { return }
-
         scanSession.isProcessing = true
 
-        // Haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        // Haptic: Capture (light for minimal feedback)
+        HapticManager.shared.light()
 
         // Perform card recognition with real API
         Task {
-            // Show loading overlay
-            isRecognizing = true
-            loadingStatus = "Recognizing card..."
-
             do {
-                // Step 1: Recognize card from image
+                // Show loading overlay
+                isRecognizing = true
+                loadingStatus = "Capturing photo..."
+
+                // Step 1: Capture high-quality photo
+                let image = try await cameraManager.capturePhoto()
+
+                // Update loading status
+                loadingStatus = "Recognizing card..."
+
+                // Step 2: Recognize card from image
                 let recognition = try await recognitionService.recognizeCard(from: image)
 
                 // Update loading status
                 loadingStatus = "Fetching prices..."
 
-                // Step 2: Fetch pricing (in parallel with showing confirmation)
+                // Step 3: Fetch pricing (in parallel with showing confirmation)
                 async let pricing = try? await pricingService.fetchPricing(
                     cardName: recognition.cardName,
                     setName: recognition.setName,
@@ -475,44 +569,39 @@ struct CameraView: View {
                 // Hide loading overlay
                 isRecognizing = false
 
-                // Step 3: Show confirmation view
+                // Step 4: Show success animation
+                withAnimation {
+                    showSuccessAnimation = true
+                }
+
+                // Store pending data for confirmation
                 pendingCardImage = image
                 pendingRecognition = recognition
                 pendingPricing = await pricing
-                showConfirmation = true
 
                 scanSession.isProcessing = false
             } catch {
-                // Handle recognition error
-                print("Recognition error: \(error.localizedDescription)")
+                // Handle capture or recognition error
+                print("Capture/Recognition error: \(error.localizedDescription)")
 
-                // Show error feedback
-                let errorGenerator = UINotificationFeedbackGenerator()
-                errorGenerator.notificationOccurred(.error)
+                // Hide loading
+                isRecognizing = false
 
-                // Fall back to manual entry or show error
-                // For now, create a card with low confidence
-                let fallbackRecognition = RecognitionResult(
-                    cardName: "Unknown Card",
-                    setName: "Unknown Set",
-                    cardNumber: "???",
-                    confidence: 0.0,
-                    rarity: nil,
-                    cardType: nil,
-                    subtype: nil,
-                    supertype: nil
-                )
+                // Show error overlay
+                errorType = .cardNotFound
+                withAnimation {
+                    showErrorOverlay = true
+                }
 
-                pendingCardImage = image
-                pendingRecognition = fallbackRecognition
-                pendingPricing = nil
-                showConfirmation = true
+                // Haptic: Error
+                HapticManager.shared.error()
 
                 scanSession.isProcessing = false
-                isRecognizing = false
             }
 
-            // Reset detection state after brief delay
+            // Reset detection state and counters
+            stableDetectionCount = 0
+            lowConfidenceCount = 0
             try? await Task.sleep(for: .milliseconds(500))
             cameraManager.detectionState = .searching
         }
@@ -543,9 +632,154 @@ struct CameraView: View {
             print("Error saving card: \(error)")
         }
 
-        // Success haptic
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        // Haptic: Card saved
+        HapticManager.shared.success()
+    }
+
+    private func handleSuccessAnimationComplete() {
+        // Show confirmation sheet after success animation
+        showConfirmation = true
+    }
+
+    private func handleDetectionStateChange(_ newState: CameraManager.DetectionState) {
+        // Event-driven auto-capture: track stable frames instead of polling with Timer
+        guard autoCapture, !scanSession.isProcessing else { return }
+
+        switch newState {
+        case .readyToCapture:
+            stableDetectionCount += 1
+            if stableDetectionCount >= requiredStableFrames {
+                // Perfect frame reached - subtle haptic feedback
+                HapticManager.shared.light()
+                performCapture()
+                stableDetectionCount = 0
+            }
+        case .cardFound, .searching, .capturing:
+            stableDetectionCount = 0
+        }
+
+        // Low light detection: track low confidence frames
+        if case .searching = newState {
+            lowConfidenceCount += 1
+            if lowConfidenceCount >= lowConfidenceThreshold {
+                showLowLightError()
+                lowConfidenceCount = 0
+            }
+        } else {
+            lowConfidenceCount = 0
+        }
+    }
+
+    private func showLowLightError() {
+        errorType = .lowLight
+        withAnimation {
+            showErrorOverlay = true
+        }
+        HapticManager.shared.warning()
+    }
+
+    private func handleErrorDismiss() {
+        withAnimation {
+            showErrorOverlay = false
+        }
+        errorType = nil
+    }
+
+    private func handleSecondaryAction(for error: CameraError) {
+        switch error {
+        case .lowLight:
+            // Enable torch
+            guard let device = AVCaptureDevice.default(for: .video),
+                  device.hasTorch else { return }
+
+            do {
+                try device.lockForConfiguration()
+                device.torchMode = .on
+                device.unlockForConfiguration()
+                cameraManager.isFlashOn = true
+            } catch {
+                print("Torch error: \(error)")
+            }
+
+            showErrorOverlay = false
+            errorType = nil
+
+        case .cardNotFound:
+            // Could show manual entry sheet in future
+            showErrorOverlay = false
+            errorType = nil
+
+        case .cameraFailed:
+            showErrorOverlay = false
+            errorType = nil
+        }
+    }
+
+    private func dismissTutorial() {
+        UserDefaults.standard.set(true, forKey: "hasSeenCameraTutorial")
+
+        withAnimation(.easeOut(duration: 0.3)) {
+            showTutorial = false
+        }
+
+        // Pulse button 3 times
+        Task {
+            try? await Task.sleep(for: .seconds(0.3))
+            await pulseButtonThreeTimes()
+        }
+    }
+
+    private func pulseButtonThreeTimes() async {
+        for _ in 0..<3 {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                pulseButton = true
+            }
+            HapticManager.shared.light()
+
+            try? await Task.sleep(for: .seconds(0.5))
+
+            withAnimation(.easeInOut(duration: 0.5)) {
+                pulseButton = false
+            }
+
+            try? await Task.sleep(for: .seconds(0.5))
+        }
+    }
+
+    private var detectionFrameState: MinimalDetectionFrame.State {
+        if let frame = cameraManager.detectedCardFrame {
+            switch cameraManager.detectionState {
+            case .searching:
+                return .searching
+            case .cardFound:
+                return .detecting(frame)
+            case .readyToCapture:
+                return .ready(frame)
+            case .capturing:
+                return .ready(frame)
+            }
+        }
+        return .searching
+    }
+
+    private func mapToSimpleErrorType(_ error: CameraError) -> SimpleErrorModal.ErrorType {
+        switch error {
+        case .cardNotFound:
+            return .cardNotFound
+        case .lowLight:
+            return .lowLight
+        case .cameraFailed:
+            return .cardNotFound // Use cardNotFound as fallback for camera errors
+        }
+    }
+
+    private func shouldShowSecondaryAction(for error: CameraError) -> Bool {
+        switch error {
+        case .lowLight:
+            return true
+        case .cardNotFound, .cameraFailed:
+            return false
+        }
     }
 
     private func finishSession() {

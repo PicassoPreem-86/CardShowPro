@@ -31,6 +31,9 @@ public enum DesignSystem {
         /// Vibrant cyan for interactive elements (#00D9FF)
         public static let cyan = Color(hex: "#00D9FF")
 
+        /// Gold/Amber accent for minimal UI elements (#FFB84D)
+        public static let goldAmber = Color(hex: "#FFB84D")
+
         /// Success green (#34C759)
         public static let success = Color(hex: "#34C759")
 
