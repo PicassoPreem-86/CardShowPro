@@ -83,30 +83,66 @@ struct CardConfirmationView: View {
     // MARK: - Confidence Badge
 
     private var confidenceBadge: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.seal.fill")
+        VStack(spacing: DesignSystem.Spacing.xs) {
+            // Main confidence badge
+            HStack(spacing: 8) {
+                Image(systemName: confidenceIcon)
+                    .font(.subheadline)
+                    .foregroundStyle(confidenceColor)
+
+                Text("Confidence: \(Int(recognitionResult.confidence * 100))%")
+                    .font(DesignSystem.Typography.labelLarge)
+                    .fontWeight(.semibold)
+
+                Text("(\(recognitionResult.confidenceLevel.rawValue))")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+            }
+            .padding(.horizontal, DesignSystem.Spacing.sm)
+            .padding(.vertical, DesignSystem.Spacing.xxs)
+            .background(confidenceColor.opacity(0.15))
+            .clipShape(Capsule())
+
+            // Warning message for low confidence
+            if recognitionResult.confidence < 0.75 {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(DesignSystem.Typography.captionSmall)
+                    Text(confidenceWarningMessage)
+                        .font(DesignSystem.Typography.caption)
+                }
                 .foregroundStyle(confidenceColor)
-
-            Text("Confidence: \(Int(recognitionResult.confidence * 100))%")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            Text("(\(recognitionResult.confidenceLevel.rawValue))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .padding(.horizontal, DesignSystem.Spacing.sm)
+                .padding(.vertical, DesignSystem.Spacing.xxs)
+                .background(confidenceColor.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm))
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(confidenceColor.opacity(0.15))
-        .clipShape(Capsule())
+    }
+
+    private var confidenceIcon: String {
+        switch recognitionResult.confidenceLevel {
+        case .veryHigh: return "checkmark.seal.fill"
+        case .high: return "checkmark.circle.fill"
+        case .medium: return "exclamationmark.triangle.fill"
+        case .low: return "xmark.octagon.fill"
+        }
     }
 
     private var confidenceColor: Color {
         switch recognitionResult.confidenceLevel {
-        case .veryHigh: return .green
-        case .high: return .blue
-        case .medium: return .orange
-        case .low: return .red
+        case .veryHigh: return DesignSystem.Colors.success
+        case .high: return DesignSystem.Colors.electricBlue
+        case .medium: return DesignSystem.Colors.warning
+        case .low: return DesignSystem.Colors.error
+        }
+    }
+
+    private var confidenceWarningMessage: String {
+        switch recognitionResult.confidenceLevel {
+        case .medium: return "Please verify card details before adding"
+        case .low: return "Low confidence - review all information carefully"
+        default: return ""
         }
     }
 

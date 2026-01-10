@@ -39,24 +39,72 @@ struct AddEditItemView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Category Section
+                // Photo Section (MOVED TO TOP)
                 Section {
-                    Picker("Category", selection: $selectedCategory) {
-                        ForEach(CardCategory.allCases, id: \.self) { category in
+                    if let image = selectedImage {
+                        // Show selected image
+                        HStack {
+                            Spacer()
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            Spacer()
+                        }
+
+                        Button(role: .destructive) {
+                            selectedImage = nil
+                        } label: {
                             HStack {
-                                Image(systemName: category.icon)
-                                    .foregroundStyle(category.color)
-                                Text(category.rawValue)
+                                Image(systemName: "trash")
+                                Text("Remove Photo")
                             }
-                            .tag(category)
+                        }
+                    } else {
+                        // Photo picker buttons with enhanced CTAs
+                        Button {
+                            imagePickerSource = .camera
+                            showImagePicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "camera.fill")
+                                    .foregroundStyle(.cyan)
+                                VStack(alignment: .leading) {
+                                    Text("Take Photo")
+                                        .foregroundStyle(.primary)
+                                    Text("Best for accurate card recognition")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        Button {
+                            imagePickerSource = .photoLibrary
+                            showImagePicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "photo.fill")
+                                    .foregroundStyle(.cyan)
+                                VStack(alignment: .leading) {
+                                    Text("Choose from Library")
+                                        .foregroundStyle(.primary)
+                                    Text("Select an existing photo from your device")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
-                    .pickerStyle(.navigationLink)
                 } header: {
-                    Text("CATEGORY")
+                    Text("PHOTO")
+                } footer: {
+                    Text("Adding a photo helps with card identification and value tracking")
+                        .font(.caption)
                 }
 
-                // Card Details Section
+                // Card Details Section (MOVED TO SECOND)
                 Section {
                     TextField("Card Name", text: $cardName)
                         .autocorrectionDisabled()
@@ -87,7 +135,24 @@ struct AddEditItemView: View {
                     }
                 }
 
-                // Pricing Section
+                // Category Section (MOVED TO THIRD)
+                Section {
+                    Picker("Category", selection: $selectedCategory) {
+                        ForEach(CardCategory.allCases, id: \.self) { category in
+                            HStack {
+                                Image(systemName: category.icon)
+                                    .foregroundStyle(category.color)
+                                Text(category.rawValue)
+                            }
+                            .tag(category)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                } header: {
+                    Text("CATEGORY")
+                }
+
+                // Pricing Section (MOVED TO FOURTH)
                 Section {
                     HStack {
                         Text("$")
@@ -127,69 +192,7 @@ struct AddEditItemView: View {
                     }
                 }
 
-                // Photo Section
-                Section {
-                    if let image = selectedImage {
-                        // Show selected image
-                        HStack {
-                            Spacer()
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(height: 200)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                            Spacer()
-                        }
-
-                        Button(role: .destructive) {
-                            selectedImage = nil
-                        } label: {
-                            HStack {
-                                Image(systemName: "trash")
-                                Text("Remove Photo")
-                            }
-                        }
-                    } else {
-                        // Photo picker buttons
-                        Button {
-                            imagePickerSource = .camera
-                            showImagePicker = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "camera.fill")
-                                    .foregroundStyle(.cyan)
-                                VStack(alignment: .leading) {
-                                    Text("Take Photo")
-                                        .foregroundStyle(.primary)
-                                    Text("Use camera to capture card")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-
-                        Button {
-                            imagePickerSource = .photoLibrary
-                            showImagePicker = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "photo.fill")
-                                    .foregroundStyle(.cyan)
-                                VStack(alignment: .leading) {
-                                    Text("Choose from Library")
-                                        .foregroundStyle(.primary)
-                                    Text("Select existing photo")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                } header: {
-                    Text("PHOTO")
-                }
-
-                // Notes Section
+                // Notes Section (MOVED TO FIFTH)
                 Section {
                     TextField("Optional notes about this card...", text: $notes, axis: .vertical)
                         .lineLimit(3...6)

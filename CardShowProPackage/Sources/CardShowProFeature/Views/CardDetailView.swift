@@ -8,6 +8,7 @@ struct CardDetailView: View {
     @State private var showEditSheet = false
     @State private var showDeleteAlert = false
     @State private var showShareSheet = false
+    @State private var showZoomView = false
 
     // Mock data for demo - will come from card in future
     private var purchasePrice: Double {
@@ -85,17 +86,41 @@ struct CardDetailView: View {
         } message: {
             Text("Are you sure you want to delete \(card.cardName)? This action cannot be undone.")
         }
+        .fullScreenCover(isPresented: $showZoomView) {
+            if let image = card.image {
+                ZoomableImageView(image: image)
+            }
+        }
     }
 
     // MARK: - Hero Image
     private var heroImage: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             if let image = card.image {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(height: 400)
                     .clipped()
+                    .onTapGesture {
+                        showZoomView = true
+                    }
+                    .accessibilityLabel("Card image")
+                    .accessibilityHint("Double tap to view full screen")
+
+                // Tap to expand badge
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(DesignSystem.Typography.captionSmall)
+                    Text("Tap to expand")
+                        .font(DesignSystem.Typography.caption)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, DesignSystem.Spacing.xs)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.6))
+                .clipShape(Capsule())
+                .padding(DesignSystem.Spacing.sm)
             } else {
                 Rectangle()
                     .fill(
@@ -246,12 +271,35 @@ struct CardDetailView: View {
                 Divider()
                     .padding(.leading, 44)
 
-                DetailRow(
-                    icon: "sparkle",
-                    iconColor: .cyan,
-                    label: "Confidence",
-                    value: "\(Int(card.confidence * 100))%"
-                )
+                HStack(spacing: 16) {
+                    Image(systemName: confidenceIcon(for: card.confidence))
+                        .font(.title3)
+                        .foregroundStyle(confidenceColor(for: card.confidence))
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Confidence")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Text("\(Int(card.confidence * 100))%")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.white)
+
+                            // Confidence badge
+                            Text(confidenceLevel(for: card.confidence))
+                                .font(DesignSystem.Typography.captionBold)
+                                .foregroundStyle(confidenceColor(for: card.confidence))
+                                .padding(.horizontal, DesignSystem.Spacing.xxs)
+                                .padding(.vertical, 2)
+                                .background(confidenceColor(for: card.confidence).opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Spacer()
+                }
             }
             .padding()
             .background(Color(.systemBackground))
@@ -352,6 +400,34 @@ struct CardDetailView: View {
         modelContext.delete(card)
         try? modelContext.save()
         dismiss()
+    }
+
+    // MARK: - Confidence Helpers
+    private func confidenceLevel(for confidence: Double) -> String {
+        switch confidence {
+        case 0.9...1.0: return "Very High"
+        case 0.75..<0.9: return "High"
+        case 0.5..<0.75: return "Medium"
+        default: return "Low"
+        }
+    }
+
+    private func confidenceColor(for confidence: Double) -> Color {
+        switch confidence {
+        case 0.9...1.0: return DesignSystem.Colors.success
+        case 0.75..<0.9: return DesignSystem.Colors.electricBlue
+        case 0.5..<0.75: return DesignSystem.Colors.warning
+        default: return DesignSystem.Colors.error
+        }
+    }
+
+    private func confidenceIcon(for confidence: Double) -> String {
+        switch confidence {
+        case 0.9...1.0: return "checkmark.seal.fill"
+        case 0.75..<0.9: return "checkmark.circle.fill"
+        case 0.5..<0.75: return "exclamationmark.triangle.fill"
+        default: return "xmark.octagon.fill"
+        }
     }
 }
 

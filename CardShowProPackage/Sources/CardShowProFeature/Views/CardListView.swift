@@ -8,6 +8,9 @@ struct CardListView: View {
     @State private var selectedCategory: CardCategory = .allProduct
     @State private var showAddItemSheet = false
     @State private var viewMode: ViewMode = .list
+    @State private var isSelectionMode = false
+    @State private var selectedCards: Set<InventoryCard.ID> = []
+    @State private var showBulkDeleteAlert = false
 
     enum ViewMode {
         case list
@@ -103,25 +106,41 @@ struct CardListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search cards...")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !filteredCards.isEmpty {
+                        Button(isSelectionMode ? "Cancel" : "Select") {
+                            withAnimation {
+                                isSelectionMode.toggle()
+                                if !isSelectionMode {
+                                    selectedCards.removeAll()
+                                }
+                            }
+                        }
+                        .foregroundStyle(DesignSystem.Colors.cyan)
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 12) {
-                        // View Mode Toggle
-                        Button {
-                            withAnimation {
-                                viewMode = viewMode == .list ? .grid : .list
+                        // View Mode Toggle (hide in selection mode)
+                        if !isSelectionMode {
+                            Button {
+                                withAnimation {
+                                    viewMode = viewMode == .list ? .grid : .list
+                                }
+                            } label: {
+                                Image(systemName: viewMode == .list ? "square.grid.2x2.fill" : "list.bullet")
+                                    .foregroundStyle(.cyan)
                             }
-                        } label: {
-                            Image(systemName: viewMode == .list ? "square.grid.2x2.fill" : "list.bullet")
-                                .foregroundStyle(.cyan)
-                        }
 
-                        // Add Button
-                        Button {
-                            showAddItemSheet = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.cyan)
+                            // Add Button
+                            Button {
+                                showAddItemSheet = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.cyan)
+                            }
                         }
                     }
                 }
@@ -129,7 +148,95 @@ struct CardListView: View {
             .sheet(isPresented: $showAddItemSheet) {
                 AddEditItemView(cardToEdit: nil)
             }
+            .alert("Delete \(selectedCards.count) card(s)?", isPresented: $showBulkDeleteAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    performBulkDelete()
+                }
+            } message: {
+                Text("This action cannot be undone.")
+            }
+            .overlay(alignment: .bottom) {
+                if isSelectionMode && !selectedCards.isEmpty {
+                    bulkActionBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
         }
+    }
+
+    // MARK: - Bulk Action Bar
+    private var bulkActionBar: some View {
+        HStack(spacing: DesignSystem.Spacing.md) {
+            // Select All Button
+            Button {
+                withAnimation {
+                    if selectedCards.count == filteredCards.count {
+                        selectedCards.removeAll()
+                    } else {
+                        selectedCards = Set(filteredCards.map(\.id))
+                    }
+                }
+            } label: {
+                Text(selectedCards.count == filteredCards.count ? "Deselect All" : "Select All")
+                    .font(DesignSystem.Typography.labelLarge)
+                    .foregroundStyle(DesignSystem.Colors.cyan)
+            }
+
+            Spacer()
+
+            // Selected count
+            Text("\(selectedCards.count) selected")
+                .font(DesignSystem.Typography.body)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+            Spacer()
+
+            // Delete Button
+            Button {
+                showBulkDeleteAlert = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash.fill")
+                    Text("Delete")
+                }
+                .font(DesignSystem.Typography.labelLarge)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
+                .padding(.horizontal, DesignSystem.Spacing.md)
+                .padding(.vertical, DesignSystem.Spacing.xs)
+                .background(DesignSystem.Colors.error)
+                .clipShape(Capsule())
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
+    }
+
+    // MARK: - Bulk Delete Action
+    private func performBulkDelete() {
+        let cardsToDelete = filteredCards.filter { selectedCards.contains($0.id) }
+        for card in cardsToDelete {
+            modelContext.delete(card)
+        }
+        try? modelContext.save()
+        selectedCards.removeAll()
+        isSelectionMode = false
+    }
+
+    // MARK: - Refresh Inventory
+    @MainActor
+    private func refreshInventory() async {
+        // Brief delay for visual feedback
+        try? await Task.sleep(for: .milliseconds(500))
+
+        // Trigger haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+
+        // In the future, this would refresh from network/API
+        // For now, the @Query will automatically update from SwiftData
     }
 
     // MARK: - Stats Header
@@ -165,35 +272,75 @@ struct CardListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: selectedCategory.icon)
-                .font(.system(size: 60))
-                .foregroundStyle(selectedCategory.color.opacity(0.5))
+        VStack(spacing: DesignSystem.Spacing.md) {
+            // Category icon with colored circle background
+            ZStack {
+                Circle()
+                    .fill(selectedCategory.color.opacity(0.15))
+                    .frame(width: 100, height: 100)
+
+                Image(systemName: selectedCategory.icon)
+                    .font(.system(size: 44))
+                    .foregroundStyle(selectedCategory.color)
+            }
+            .padding(.bottom, DesignSystem.Spacing.xs)
 
             Text("No Cards Found")
-                .font(.title2)
+                .font(DesignSystem.Typography.heading2)
                 .fontWeight(.semibold)
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
 
             Text(emptyStateMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(DesignSystem.Typography.body)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, DesignSystem.Spacing.xxl)
 
-            Button {
-                showAddItemSheet = true
-            } label: {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Add Manually")
+            VStack(spacing: DesignSystem.Spacing.xs) {
+                // Primary action - Scan Cards
+                Button {
+                    // Navigate to Scan tab (will be implemented via AppState)
+                } label: {
+                    HStack(spacing: DesignSystem.Spacing.xxs) {
+                        Image(systemName: "camera.fill")
+                        Text("Scan Cards")
+                    }
+                    .font(DesignSystem.Typography.labelLarge)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: 280)
+                    .padding(.vertical, DesignSystem.Spacing.sm)
+                    .background(DesignSystem.Colors.cyan)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                    .shadow(
+                        color: DesignSystem.Shadows.level2.color,
+                        radius: DesignSystem.Shadows.level2.radius,
+                        x: DesignSystem.Shadows.level2.x,
+                        y: DesignSystem.Shadows.level2.y
+                    )
                 }
-                .font(.headline)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(Color.cyan)
-                .clipShape(Capsule())
+
+                // Secondary action - Add Manually
+                Button {
+                    showAddItemSheet = true
+                } label: {
+                    HStack(spacing: DesignSystem.Spacing.xxs) {
+                        Image(systemName: "plus.circle")
+                        Text("Add Manually")
+                    }
+                    .font(DesignSystem.Typography.labelLarge)
+                    .foregroundStyle(DesignSystem.Colors.cyan)
+                    .frame(maxWidth: 280)
+                    .padding(.vertical, DesignSystem.Spacing.sm)
+                    .background(DesignSystem.Colors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
+                            .stroke(DesignSystem.Colors.cyan.opacity(0.3), lineWidth: 1)
+                    )
+                }
             }
+            .padding(.top, DesignSystem.Spacing.xs)
         }
         .frame(maxHeight: .infinity)
     }
@@ -202,30 +349,55 @@ struct CardListView: View {
     private var cardListView: some View {
         List {
             ForEach(filteredCards) { card in
-                NavigationLink {
-                    CardDetailView(card: card)
-                } label: {
-                    InventoryCardRow(card: card, category: mockCategory(for: card))
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        modelContext.delete(card)
-                        try? modelContext.save()
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-                .swipeActions(edge: .leading) {
+                if isSelectionMode {
                     Button {
-                        // TODO: Edit action
+                        withAnimation {
+                            if selectedCards.contains(card.id) {
+                                selectedCards.remove(card.id)
+                            } else {
+                                selectedCards.insert(card.id)
+                            }
+                        }
                     } label: {
-                        Label("Edit", systemImage: "pencil")
+                        HStack(spacing: DesignSystem.Spacing.sm) {
+                            // Checkmark circle
+                            Image(systemName: selectedCards.contains(card.id) ? "checkmark.circle.fill" : "circle")
+                                .font(.title3)
+                                .foregroundStyle(selectedCards.contains(card.id) ? DesignSystem.Colors.cyan : DesignSystem.Colors.textTertiary)
+
+                            InventoryCardRow(card: card, category: mockCategory(for: card))
+                        }
                     }
-                    .tint(.cyan)
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink {
+                        CardDetailView(card: card)
+                    } label: {
+                        InventoryCardRow(card: card, category: mockCategory(for: card))
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            modelContext.delete(card)
+                            try? modelContext.save()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            // TODO: Edit action
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(.cyan)
+                    }
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .refreshable {
+            await refreshInventory()
+        }
     }
 
     // MARK: - Grid View
@@ -335,14 +507,14 @@ struct InventoryCardRow: View {
                     .fontWeight(.bold)
                     .foregroundStyle(.cyan)
 
-                // Confidence
+                // Confidence with color coding
                 HStack(spacing: 2) {
-                    Image(systemName: "sparkle")
+                    Image(systemName: confidenceIcon(for: card.confidence))
                         .font(.caption2)
                     Text("\(Int(card.confidence * 100))%")
                         .font(.caption2)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(confidenceColor(for: card.confidence))
             }
         }
         .padding(.vertical, 4)
@@ -417,12 +589,12 @@ struct InventoryCardGridItem: View {
                     Spacer()
 
                     HStack(spacing: 2) {
-                        Image(systemName: "sparkle")
+                        Image(systemName: confidenceIcon(for: card.confidence))
                             .font(.caption2)
                         Text("\(Int(card.confidence * 100))%")
                             .font(.caption2)
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(confidenceColor(for: card.confidence))
                 }
             }
         }
@@ -436,4 +608,23 @@ struct InventoryCardGridItem: View {
 // MARK: - CardCategory Extension for Identifiable
 extension CardCategory: Identifiable {
     var id: String { rawValue }
+}
+
+// MARK: - Confidence Helper Functions
+private func confidenceColor(for confidence: Double) -> Color {
+    switch confidence {
+    case 0.9...1.0: return DesignSystem.Colors.success
+    case 0.75..<0.9: return DesignSystem.Colors.electricBlue
+    case 0.5..<0.75: return DesignSystem.Colors.warning
+    default: return DesignSystem.Colors.error
+    }
+}
+
+private func confidenceIcon(for confidence: Double) -> String {
+    switch confidence {
+    case 0.9...1.0: return "checkmark.seal.fill"
+    case 0.75..<0.9: return "checkmark.circle.fill"
+    case 0.5..<0.75: return "exclamationmark.triangle.fill"
+    default: return "xmark.octagon.fill"
+    }
 }

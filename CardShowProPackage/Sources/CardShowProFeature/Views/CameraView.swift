@@ -105,14 +105,14 @@ struct CameraView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.headline)
+                            .font(DesignSystem.Typography.heading4)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
                             .frame(width: 36, height: 36)
                             .background(Color.black.opacity(0.5))
                             .clipShape(Circle())
                     }
-                    .padding()
+                    .padding(DesignSystem.Spacing.md)
 
                     Spacer()
 
@@ -124,14 +124,14 @@ struct CameraView: View {
                             generator.impactOccurred()
                         } label: {
                             Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
-                                .font(.headline)
+                                .font(DesignSystem.Typography.heading4)
                                 .fontWeight(.semibold)
-                                .foregroundStyle(cameraManager.isFlashOn ? .yellow : .white)
+                                .foregroundStyle(cameraManager.isFlashOn ? DesignSystem.Colors.thunderYellow : DesignSystem.Colors.textPrimary)
                                 .frame(width: 36, height: 36)
                                 .background(Color.black.opacity(0.5))
                                 .clipShape(Circle())
                         }
-                        .padding()
+                        .padding(DesignSystem.Spacing.md)
                     }
                 }
                 Spacer()
@@ -240,29 +240,29 @@ struct CameraView: View {
 
     // MARK: - Instruction Text
     private var instructionText: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DesignSystem.Spacing.xs) {
             if cameraManager.isCardDetected {
                 Text(cameraManager.detectionState.message)
-                    .font(.headline)
+                    .font(DesignSystem.Typography.heading4)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    .padding(.horizontal, DesignSystem.Spacing.lg)
+                    .padding(.vertical, DesignSystem.Spacing.sm)
                     .background(cameraManager.detectionState.color.opacity(0.9))
                     .clipShape(Capsule())
                     .transition(.scale.combined(with: .opacity))
             } else {
                 Text("Position card in frame")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                    .font(DesignSystem.Typography.body)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.9))
+                    .padding(.horizontal, DesignSystem.Spacing.lg)
+                    .padding(.vertical, DesignSystem.Spacing.sm)
                     .background(Color.black.opacity(0.5))
                     .clipShape(Capsule())
             }
         }
-        .animation(.spring(response: 0.3), value: cameraManager.isCardDetected)
-        .animation(.spring(response: 0.3), value: cameraManager.detectionState)
+        .animation(DesignSystem.Animation.springSmooth, value: cameraManager.isCardDetected)
+        .animation(DesignSystem.Animation.springSmooth, value: cameraManager.detectionState)
     }
 
     // MARK: - Bottom Panel
@@ -347,24 +347,24 @@ struct CameraView: View {
 
     // MARK: - Scanned Cards Carousel
     private var scannedCardsCarousel: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DesignSystem.Spacing.sm) {
             HStack {
                 Text("Scanned: \(scanSession.cardCount) cards")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
                 Spacer()
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, DesignSystem.Spacing.lg)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
                     ForEach(scanSession.scannedCards) { card in
                         ScannedCardThumbnail(card: card) {
                             scanSession.removeCard(card)
                         }
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, DesignSystem.Spacing.lg)
             }
             .frame(height: 100)
 
@@ -379,11 +379,11 @@ struct CameraView: View {
                     .fontWeight(.bold)
                     .foregroundStyle(DesignSystem.Colors.cyan)
             }
-            .padding(.horizontal, DesignSystem.Spacing.md)
+            .padding(.horizontal, DesignSystem.Spacing.lg)
             .padding(.top, DesignSystem.Spacing.xxxs)
         }
-        .padding(.bottom, 12)
-        .background(Color.black.opacity(0.3))
+        .padding(.bottom, DesignSystem.Spacing.sm)
+        .background(Color.black.opacity(0.4))
     }
 
     // MARK: - Settings Sheet
@@ -780,15 +780,15 @@ struct ScannedCardThumbnail: View {
     let onDelete: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: DesignSystem.Spacing.xs) {
             ZStack(alignment: .topTrailing) {
                 // Card Image
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.systemGray5))
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm)
+                    .fill(DesignSystem.Colors.cardBackground)
                     .frame(width: 70, height: 70)
                     .overlay {
                         Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DesignSystem.Colors.textTertiary)
                     }
 
                 // Delete button
@@ -796,23 +796,23 @@ struct ScannedCardThumbnail: View {
                     onDelete()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .background(Circle().fill(Color.red))
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        .background(Circle().fill(DesignSystem.Colors.error))
                 }
                 .offset(x: 6, y: -6)
             }
 
             // Card info
-            VStack(spacing: 2) {
+            VStack(spacing: DesignSystem.Spacing.xxxs) {
                 Text("$\(String(format: "%.0f", card.estimatedValue))")
                     .font(DesignSystem.Typography.caption)
                     .fontWeight(.bold)
                     .foregroundStyle(DesignSystem.Colors.cyan)
 
                 Text(card.cardName)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
                     .lineLimit(1)
                     .frame(width: 70)
             }

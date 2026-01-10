@@ -12,19 +12,19 @@ public struct ContentView: View {
                 }
                 .tag(AppState.Tab.dashboard)
 
-            CardListView()
-                .environment(appState.scanSession)
-                .tabItem {
-                    Label("Inventory", systemImage: "archivebox.fill")
-                }
-                .tag(AppState.Tab.inventory)
-
             CameraView()
                 .environment(appState.scanSession)
                 .tabItem {
                     Label("Scan", systemImage: "camera.fill")
                 }
                 .tag(AppState.Tab.scan)
+
+            CardListView()
+                .environment(appState.scanSession)
+                .tabItem {
+                    Label("Inventory", systemImage: "archivebox.fill")
+                }
+                .tag(AppState.Tab.inventory)
 
             ToolsView()
                 .environment(appState)
