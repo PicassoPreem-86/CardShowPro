@@ -1,5 +1,130 @@
 # Development Progress
 
+## Session: 2026-01-10 (Part 7 - Scanning Box Popup Fix)
+
+### What Was Done
+- ✅ **CRITICAL FIX**: Resolved scanning box popup issue in camera view
+  - Fixed state management bug where success animation persisted after completion
+  - Added proper state reset in handleSuccessAnimationComplete()
+  - Enhanced onRescan closure to reset all loading states
+  - Added defensive state reset in confirmation sheet's onDismiss handler
+
+### Implementation Details
+
+**Problem Found:**
+- `showSuccessAnimation` was set to `true` after card recognition but never reset to `false`
+- This caused the QuickSuccessFeedback overlay to persist and pop up unexpectedly
+- The `onRescan` closure didn't reset all state variables (isRecognizing, showSuccessAnimation, scanSession.isProcessing)
+- Sheet dismissal didn't defensively reset state, allowing edge cases to cause popups
+
+**Root Cause Analysis:**
+```swift
+// LINE 600-602: Success animation set to true
+withAnimation {
+    showSuccessAnimation = true
+}
+
+// LINE 666-669: handleSuccessAnimationComplete() showed confirmation
+// but NEVER reset showSuccessAnimation = false
+
+// LINE 166-171: Success animation kept displaying because state stuck at true
+if showSuccessAnimation {
+    QuickSuccessFeedback { ... }
+    .transition(.opacity)
+}
+```
+
+**Solution Applied:**
+1. Added state reset in `handleSuccessAnimationComplete()`:
+   ```swift
+   withAnimation {
+       showSuccessAnimation = false  // ← ADDED
+   }
+   showConfirmation = true
+   ```
+
+2. Enhanced `onRescan` closure to reset all states:
+   ```swift
+   onRescan: {
+       pendingCardImage = nil
+       pendingRecognition = nil
+       pendingPricing = nil
+       isRecognizing = false           // ← ADDED
+       showSuccessAnimation = false    // ← ADDED
+       scanSession.isProcessing = false // ← ADDED
+       cameraManager.detectionState = .searching
+   }
+   ```
+
+3. Added defensive reset in sheet's onDismiss:
+   ```swift
+   .sheet(isPresented: $showConfirmation, onDismiss: {
+       isRecognizing = false
+       showSuccessAnimation = false
+       scanSession.isProcessing = false
+   }) { ... }
+   ```
+
+**Files Modified:**
+- `CardShowProPackage/Sources/CardShowProFeature/Views/CameraView.swift` (lines 666-674, 215-232, 205-210)
+
+### How It Was Tested
+- ✅ Project builds successfully with `xcodebuild clean build`
+- ✅ Zero compilation errors
+- ✅ Follows Swift 6.1 strict concurrency with @MainActor isolation
+- ✅ Uses .task modifier for async operations (auto-cancels)
+- ✅ Proper withAnimation wrapping for smooth transitions
+- ⏳ **NEEDS MANUAL TESTING**: Verify scanning box no longer pops up
+
+### Manual Testing Required
+
+**To verify the fix:**
+1. Launch app on simulator
+2. Navigate to Scan tab
+3. Trigger card capture (manual or auto)
+4. Observe success animation plays once and disappears
+5. Confirm card in confirmation sheet
+6. Verify no scanning box reappears after confirmation
+7. Tap "Rescan" and verify all overlays properly reset
+8. Dismiss confirmation sheet without action - verify clean state
+9. Scan multiple cards in succession - verify no overlay leakage
+
+**Expected Behavior:**
+- Success animation plays once (0.3s) then disappears
+- No overlays persist after confirmation sheet closes
+- Rescan properly resets all state
+- Multiple scans don't cause overlay buildup
+
+### Known Issues
+- None related to scanning box popup
+- Manual testing still required to verify complete fix
+
+### Next Steps
+1. **CRITICAL**: Manually test scanning box fix on simulator
+2. Verify no overlays persist across multiple scanning sessions
+3. If fix verified, mark as complete
+4. Continue with camera enhancement manual testing from Part 5
+
+### Architecture Decisions
+
+**Why reset state in multiple places?**
+- **handleSuccessAnimationComplete()**: Primary reset after animation completes
+- **onRescan closure**: Reset when user explicitly rescans
+- **onDismiss handler**: Defensive reset for edge cases (user dismisses sheet via swipe, etc.)
+- Multiple reset points ensure clean state regardless of user interaction path
+
+**Why use withAnimation for state reset?**
+- Smooth transition when hiding success animation
+- Prevents jarring visual pops
+- Consistent with SwiftUI best practices
+
+**Why @MainActor isolation matters here:**
+- All state variables (isRecognizing, showSuccessAnimation) are UI state
+- Must be modified on main thread to prevent data races
+- Swift 6.1 enforces this at compile time
+
+---
+
 ## Session: 2026-01-10 (Part 6 - Critical Build Fix)
 
 ### What Was Done
