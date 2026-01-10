@@ -114,8 +114,7 @@ struct QuickSuccessFeedback: View {
 
     // MARK: - Haptic
     private func triggerHaptic() {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        HapticManager.shared.success()
     }
 }
 

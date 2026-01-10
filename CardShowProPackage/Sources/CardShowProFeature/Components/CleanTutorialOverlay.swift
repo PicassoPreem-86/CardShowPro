@@ -117,8 +117,7 @@ struct CleanTutorialOverlay: View {
             }
 
             // Light haptic
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
+            HapticManager.shared.light()
         } else {
             // Complete tutorial
             onDismiss()

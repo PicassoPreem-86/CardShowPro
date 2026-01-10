@@ -10,8 +10,6 @@ struct CameraView: View {
     @State private var scanSession = ScanSession()
     @State private var selectedMode: ScanMode = .negotiator
     @State private var selectedGame: CardGame = .pokemon
-    @State private var showSettings = false
-    @State private var autoCapture = true
 
     // Card recognition services
     @State private var recognitionService = CardRecognitionService.shared
@@ -25,7 +23,6 @@ struct CameraView: View {
 
     // Photo picker state
     @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var showPhotoPicker = false
 
     // Loading state
     @State private var isInitializing = true
@@ -45,17 +42,8 @@ struct CameraView: View {
     @State private var errorType: CameraError?
     @State private var showCameraPermissionAlert = false
 
-    // Auto-capture state tracking
-    @State private var stableDetectionCount = 0
-    private let requiredStableFrames = 10 // At 15 FPS = ~0.67s
-
-    // Low light detection
-    @State private var lowConfidenceCount = 0
-    private let lowConfidenceThreshold = 100 // ~6.6s at 15 FPS
-
     enum CameraError {
         case cardNotFound
-        case lowLight
         case cameraFailed
     }
 
@@ -63,9 +51,47 @@ struct CameraView: View {
         ZStack {
             // MARK: - Camera Feed
             if let previewLayer = cameraManager.previewLayer {
+                let _ = print("✅ DEBUG [CameraView]: Preview layer exists, rendering CameraPreviewView")
                 CameraPreviewView(previewLayer: previewLayer)
                     .ignoresSafeArea()
+            } else if case .failed = cameraManager.sessionState {
+                let _ = print("❌ DEBUG [CameraView]: Session state is .failed, showing error UI")
+                // Camera setup failed - show error with retry
+                Color.black
+                    .ignoresSafeArea()
+                    .overlay {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.yellow)
+
+                            Text("Camera Setup Failed")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+
+                            Text("Please check permissions in Settings")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.7))
+
+                            Button {
+                                Task {
+                                    await setupCamera()
+                                }
+                            } label: {
+                                Text("Retry")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 12)
+                                    .background(Color.blue)
+                                    .clipShape(Capsule())
+                            }
+                            .padding(.top, 8)
+                        }
+                        .padding()
+                    }
             } else {
+                let _ = print("⚠️ DEBUG [CameraView]: Preview layer is NIL, showing placeholder. Session state: \(cameraManager.sessionState)")
                 // Placeholder for simulator or no camera access
                 Color.black
                     .ignoresSafeArea()
@@ -80,19 +106,12 @@ struct CameraView: View {
                             Text("Testing on device required")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.6))
+                            Text("State: \(String(describing: cameraManager.sessionState))")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.4))
                         }
                     }
             }
-
-            // MARK: - Detection Overlay
-            GeometryReader { geometry in
-                MinimalDetectionFrame(
-                    state: detectionFrameState,
-                    geometrySize: geometry.size
-                )
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
 
             // MARK: - Main UI Overlay
             VStack(spacing: 0) {
@@ -102,7 +121,7 @@ struct CameraView: View {
                 Spacer()
 
                 // Instruction Text
-                if !cameraManager.isCardDetected || scanSession.cardCount == 0 {
+                if scanSession.cardCount == 0 {
                     instructionText
                         .padding(.bottom, 20)
                 }
@@ -133,8 +152,7 @@ struct CameraView: View {
                     if cameraManager.hasFlash {
                         Button {
                             cameraManager.toggleFlash()
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.impactOccurred()
+                            HapticManager.shared.light()
                         } label: {
                             Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
                                 .font(DesignSystem.Typography.heading4)
@@ -177,9 +195,7 @@ struct CameraView: View {
                     onPrimaryAction: {
                         handleErrorDismiss()
                     },
-                    onSecondaryAction: shouldShowSecondaryAction(for: errorType) ? {
-                        handleSecondaryAction(for: errorType)
-                    } : nil
+                    onSecondaryAction: nil
                 )
                 .transition(.opacity)
             }
@@ -199,11 +215,8 @@ struct CameraView: View {
         .onDisappear {
             cameraManager.stopSession()
         }
-        .sheet(isPresented: $showSettings) {
-            settingsSheet
-        }
         .sheet(isPresented: $showConfirmation, onDismiss: {
-            // Defensive state reset when sheet dismisses (covers any edge cases)
+            // Defensive state reset when sheet dismisses
             isRecognizing = false
             showSuccessAnimation = false
             scanSession.isProcessing = false
@@ -225,7 +238,6 @@ struct CameraView: View {
                         isRecognizing = false
                         showSuccessAnimation = false
                         scanSession.isProcessing = false
-                        cameraManager.detectionState = .searching
                     }
                 )
             }
@@ -248,9 +260,6 @@ struct CameraView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("CardShowPro needs camera access to scan cards. Please enable it in Settings.")
-        }
-        .onChange(of: cameraManager.detectionState) { _, newState in
-            handleDetectionStateChange(newState)
         }
     }
 
@@ -296,8 +305,7 @@ struct CameraView: View {
                     ForEach(ScanMode.allCases, id: \.self) { mode in
                         Button {
                             selectedMode = mode
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.impactOccurred()
+                            HapticManager.shared.light()
                         } label: {
                             Label(mode.title, systemImage: mode.icon)
                         }
@@ -335,29 +343,13 @@ struct CameraView: View {
 
     // MARK: - Instruction Text
     private var instructionText: some View {
-        VStack(spacing: DesignSystem.Spacing.xs) {
-            if cameraManager.isCardDetected {
-                Text(cameraManager.detectionState.message)
-                    .font(DesignSystem.Typography.heading4)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
-                    .padding(.vertical, DesignSystem.Spacing.sm)
-                    .background(cameraManager.detectionState.color.opacity(0.9))
-                    .clipShape(Capsule())
-                    .transition(.scale.combined(with: .opacity))
-            } else {
-                Text("Position card in frame")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.9))
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
-                    .padding(.vertical, DesignSystem.Spacing.sm)
-                    .background(Color.black.opacity(0.5))
-                    .clipShape(Capsule())
-            }
-        }
-        .animation(DesignSystem.Animation.springSmooth, value: cameraManager.isCardDetected)
-        .animation(DesignSystem.Animation.springSmooth, value: cameraManager.detectionState)
+        Text("Position card in frame, then tap to capture")
+            .font(DesignSystem.Typography.body)
+            .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.9))
+            .padding(.horizontal, DesignSystem.Spacing.lg)
+            .padding(.vertical, DesignSystem.Spacing.sm)
+            .background(Color.black.opacity(0.5))
+            .clipShape(Capsule())
     }
 
     // MARK: - Bottom Panel
@@ -386,19 +378,7 @@ struct CameraView: View {
                     }
                 }
 
-                // Settings Button
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.white.opacity(0.2))
-                        .clipShape(Circle())
-                }
-
-                // Capture Button
+                // Capture Button (Manual Only)
                 Button {
                     manualCapture()
                 } label: {
@@ -413,6 +393,7 @@ struct CameraView: View {
                     }
                 }
                 .scaleEffect(pulseButton ? 1.15 : 1.0)
+                .disabled(scanSession.isProcessing)
 
                 // Done Button
                 Button {
@@ -482,49 +463,24 @@ struct CameraView: View {
         .background(Color.black.opacity(0.4))
     }
 
-    // MARK: - Settings Sheet
-    private var settingsSheet: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Toggle("Auto-Capture", isOn: $autoCapture)
-                        .tint(.blue)
-                } header: {
-                    Text("Capture Settings")
-                }
-
-                Section {
-                    Text("Flash: Auto")
-                    Text("Resolution: High")
-                } header: {
-                    Text("Camera Settings")
-                }
-            }
-            .navigationTitle("Scan Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        showSettings = false
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Actions
     private func setupCamera() async {
+        print("📱 DEBUG [CameraView]: setupCamera() called")
         // Prepare haptic generators
         HapticManager.shared.prepare()
 
         // Check camera permission
         let status = AVCaptureDevice.authorizationStatus(for: .video)
+        print("📱 DEBUG [CameraView]: Camera authorization status: \(status)")
 
         switch status {
         case .authorized:
+            print("📱 DEBUG [CameraView]: Camera authorized, configuring...")
             await configureAndStartCamera()
         case .notDetermined:
+            print("📱 DEBUG [CameraView]: Camera permission not determined, requesting...")
             let granted = await AVCaptureDevice.requestAccess(for: .video)
+            print("📱 DEBUG [CameraView]: Permission granted: \(granted)")
             if granted {
                 await configureAndStartCamera()
             } else {
@@ -532,25 +488,55 @@ struct CameraView: View {
                 HapticManager.shared.error()
             }
         case .denied, .restricted:
+            print("❌ DEBUG [CameraView]: Camera permission denied or restricted")
             showCameraPermissionAlert = true
             HapticManager.shared.error()
         @unknown default:
+            print("❌ DEBUG [CameraView]: Unknown camera permission status")
             showCameraPermissionAlert = true
             HapticManager.shared.error()
         }
     }
 
     private func configureAndStartCamera() async {
+        print("📱 DEBUG [CameraView]: configureAndStartCamera() called")
+        print("📱 DEBUG [CameraView]: Calling cameraManager.setupCaptureSession()...")
         await cameraManager.setupCaptureSession()
+        print("📱 DEBUG [CameraView]: setupCaptureSession() returned")
+
+        // Wait for preview layer to be created (with timeout)
+        var attempts = 0
+        print("📱 DEBUG [CameraView]: Waiting for preview layer creation...")
+        while cameraManager.previewLayer == nil && attempts < 20 {
+            print("📱 DEBUG [CameraView]: Attempt \(attempts + 1)/20 - preview layer still nil")
+            try? await Task.sleep(for: .milliseconds(100))
+            attempts += 1
+        }
+
+        // Only start session if preview layer exists
+        guard cameraManager.previewLayer != nil else {
+            print("❌ DEBUG [CameraView]: Preview layer is STILL NIL after \(attempts) attempts - giving up")
+            print("❌ DEBUG [CameraView]: Session state: \(cameraManager.sessionState)")
+            // Camera setup failed - hide loading
+            withAnimation(.easeOut(duration: 0.3)) {
+                isInitializing = false
+            }
+            return
+        }
+
+        print("✅ DEBUG [CameraView]: Preview layer created successfully after \(attempts) attempts")
+        print("📱 DEBUG [CameraView]: Calling cameraManager.startSession()...")
         cameraManager.startSession()
 
-        // Wait for camera to be ready
-        try? await Task.sleep(for: .seconds(0.5))
+        // Wait briefly for camera to stabilize
+        try? await Task.sleep(for: .milliseconds(300))
+        print("📱 DEBUG [CameraView]: Camera stabilization delay complete")
 
         // Hide initialization loading
         withAnimation(.easeOut(duration: 0.3)) {
             isInitializing = false
         }
+        print("✅ DEBUG [CameraView]: Initialization loading hidden")
 
         // Haptic: Camera ready
         HapticManager.shared.light()
@@ -633,12 +619,6 @@ struct CameraView: View {
 
                 scanSession.isProcessing = false
             }
-
-            // Reset detection state and counters
-            stableDetectionCount = 0
-            lowConfidenceCount = 0
-            try? await Task.sleep(for: .milliseconds(500))
-            cameraManager.detectionState = .searching
         }
     }
 
@@ -681,78 +661,11 @@ struct CameraView: View {
         showConfirmation = true
     }
 
-    private func handleDetectionStateChange(_ newState: CameraManager.DetectionState) {
-        // Event-driven auto-capture: track stable frames instead of polling with Timer
-        guard autoCapture, !scanSession.isProcessing else { return }
-
-        switch newState {
-        case .readyToCapture:
-            stableDetectionCount += 1
-            if stableDetectionCount >= requiredStableFrames {
-                // Perfect frame reached - subtle haptic feedback
-                HapticManager.shared.light()
-                performCapture()
-                stableDetectionCount = 0
-            }
-        case .cardFound, .searching, .capturing:
-            stableDetectionCount = 0
-        }
-
-        // Low light detection: track low confidence frames
-        if case .searching = newState {
-            lowConfidenceCount += 1
-            if lowConfidenceCount >= lowConfidenceThreshold {
-                showLowLightError()
-                lowConfidenceCount = 0
-            }
-        } else {
-            lowConfidenceCount = 0
-        }
-    }
-
-    private func showLowLightError() {
-        errorType = .lowLight
-        withAnimation {
-            showErrorOverlay = true
-        }
-        HapticManager.shared.warning()
-    }
-
     private func handleErrorDismiss() {
         withAnimation {
             showErrorOverlay = false
         }
         errorType = nil
-    }
-
-    private func handleSecondaryAction(for error: CameraError) {
-        switch error {
-        case .lowLight:
-            // Enable torch
-            guard let device = AVCaptureDevice.default(for: .video),
-                  device.hasTorch else { return }
-
-            do {
-                try device.lockForConfiguration()
-                device.torchMode = .on
-                device.unlockForConfiguration()
-                cameraManager.isFlashOn = true
-            } catch {
-                print("Torch error: \(error)")
-            }
-
-            showErrorOverlay = false
-            errorType = nil
-
-        case .cardNotFound:
-            // Could show manual entry sheet in future
-            showErrorOverlay = false
-            errorType = nil
-
-        case .cameraFailed:
-            showErrorOverlay = false
-            errorType = nil
-        }
     }
 
     private func dismissTutorial() {
@@ -786,39 +699,12 @@ struct CameraView: View {
         }
     }
 
-    private var detectionFrameState: MinimalDetectionFrame.State {
-        if let frame = cameraManager.detectedCardFrame {
-            switch cameraManager.detectionState {
-            case .searching:
-                return .searching
-            case .cardFound:
-                return .detecting(frame)
-            case .readyToCapture:
-                return .ready(frame)
-            case .capturing:
-                return .ready(frame)
-            }
-        }
-        return .searching
-    }
-
     private func mapToSimpleErrorType(_ error: CameraError) -> SimpleErrorModal.ErrorType {
         switch error {
         case .cardNotFound:
             return .cardNotFound
-        case .lowLight:
-            return .lowLight
         case .cameraFailed:
             return .cardNotFound // Use cardNotFound as fallback for camera errors
-        }
-    }
-
-    private func shouldShowSecondaryAction(for error: CameraError) -> Bool {
-        switch error {
-        case .lowLight:
-            return true
-        case .cardNotFound, .cameraFailed:
-            return false
         }
     }
 
@@ -925,127 +811,6 @@ enum ScanMode: String, CaseIterable {
         case .inventory: return "square.stack.3d.up.fill"
         case .sell: return "dollarsign.circle.fill"
         }
-    }
-}
-
-// MARK: - Card Detection Frame Overlay
-struct CardDetectionFrame: View {
-    let frame: CGRect
-    let geometrySize: CGSize
-    let detectionState: CameraManager.DetectionState
-
-    var body: some View {
-        let rect = convertedRect
-
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(detectionState.color, lineWidth: 3)
-            .frame(width: rect.width, height: rect.height)
-            .position(x: rect.midX, y: rect.midY)
-            .animation(.spring(response: 0.3), value: detectionState)
-            .overlay {
-                // Corner guides
-                ForEach(0..<4) { index in
-                    CornerGuide(color: detectionState.color)
-                        .rotationEffect(.degrees(Double(index * 90)))
-                        .frame(width: rect.width, height: rect.height)
-                        .position(x: rect.midX, y: rect.midY)
-                }
-            }
-    }
-
-    private var convertedRect: CGRect {
-        // Convert Vision framework normalized coordinates to screen coordinates
-        let x = frame.origin.x * geometrySize.width
-        let y = (1 - frame.origin.y - frame.height) * geometrySize.height
-        let width = frame.width * geometrySize.width
-        let height = frame.height * geometrySize.height
-
-        return CGRect(x: x, y: y, width: width, height: height)
-    }
-}
-
-struct CornerGuide: View {
-    let color: Color
-
-    var body: some View {
-        VStack {
-            HStack {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(color)
-                    .frame(width: 30, height: 4)
-                Spacer()
-            }
-            Spacer()
-        }
-    }
-}
-
-// MARK: - Background Dimming
-struct BackgroundDimming: View {
-    let detectionFrame: CGRect
-    let geometrySize: CGSize
-
-    var body: some View {
-        let rect = convertedRect
-
-        ZStack {
-            // Full screen dimming
-            Color.black.opacity(0.5)
-
-            // Cut out the detection area
-            RoundedRectangle(cornerRadius: 20)
-                .frame(width: rect.width, height: rect.height)
-                .position(x: rect.midX, y: rect.midY)
-                .blendMode(.destinationOut)
-        }
-        .compositingGroup()
-        .animation(.easeInOut(duration: 0.3), value: detectionFrame)
-    }
-
-    private var convertedRect: CGRect {
-        // Convert Vision framework normalized coordinates to screen coordinates
-        let x = detectionFrame.origin.x * geometrySize.width
-        let y = (1 - detectionFrame.origin.y - detectionFrame.height) * geometrySize.height
-        let width = detectionFrame.width * geometrySize.width
-        let height = detectionFrame.height * geometrySize.height
-
-        return CGRect(x: x, y: y, width: width, height: height)
-    }
-}
-
-// MARK: - Scanner Loading Overlay
-struct ScannerLoadingOverlay: View {
-    let status: String
-
-    var body: some View {
-        ZStack {
-            // Semi-transparent background using design system
-            DesignSystem.ComponentStyles.LoadingStyle.overlayColor
-                .ignoresSafeArea()
-
-            // Loading card with design system styling
-            VStack(spacing: DesignSystem.Spacing.md) {
-                // Spinner with design system color
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(DesignSystem.ComponentStyles.LoadingStyle.spinnerColor)
-
-                // Status text with design system typography
-                Text(status)
-                    .font(DesignSystem.Typography.heading4)
-                    .foregroundStyle(DesignSystem.ComponentStyles.LoadingStyle.textColor)
-
-                // Subtext with design system typography
-                Text("Please wait...")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
-            }
-            .padding(DesignSystem.ComponentStyles.LoadingStyle.padding)
-            .background(DesignSystem.ComponentStyles.LoadingStyle.backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.ComponentStyles.LoadingStyle.cornerRadius))
-            .shadowElevation(5)
-        }
-        .transition(.opacity)
     }
 }
 

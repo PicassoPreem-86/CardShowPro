@@ -28,16 +28,16 @@ final class HapticManager {
     // MARK: - Singleton
     static let shared = HapticManager()
 
-    // MARK: - Generators
-    private let selectionGenerator = UISelectionFeedbackGenerator()
-    private let impactLightGenerator = UIImpactFeedbackGenerator(style: .light)
-    private let impactMediumGenerator = UIImpactFeedbackGenerator(style: .medium)
-    private let impactHeavyGenerator = UIImpactFeedbackGenerator(style: .heavy)
-    private let notificationGenerator = UINotificationFeedbackGenerator()
+    // MARK: - Generators (lazy to avoid blocking during initialization)
+    private lazy var selectionGenerator = UISelectionFeedbackGenerator()
+    private lazy var impactLightGenerator = UIImpactFeedbackGenerator(style: .light)
+    private lazy var impactMediumGenerator = UIImpactFeedbackGenerator(style: .medium)
+    private lazy var impactHeavyGenerator = UIImpactFeedbackGenerator(style: .heavy)
+    private lazy var notificationGenerator = UINotificationFeedbackGenerator()
 
     // MARK: - Initialization
     private init() {
-        // Generators are prepared lazily when needed
+        // Generators are created lazily when first accessed to avoid blocking
     }
 
     // MARK: - Selection Feedback

@@ -232,8 +232,7 @@ struct CardListView: View {
         try? await Task.sleep(for: .milliseconds(500))
 
         // Trigger haptic feedback
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
+        HapticManager.shared.light()
 
         // In the future, this would refresh from network/API
         // For now, the @Query will automatically update from SwiftData

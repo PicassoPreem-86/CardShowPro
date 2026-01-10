@@ -1,23 +1,19 @@
 @preconcurrency import AVFoundation
 import SwiftUI
-@preconcurrency import Vision
 
-/// Manages camera capture session and card detection
+/// Simplified camera manager for manual photo capture only.
+/// No auto-detection, no frame processing - just camera preview and high-quality photo capture.
 @MainActor
 @Observable
 final class CameraManager: NSObject, @unchecked Sendable {
     // MARK: - Camera Properties
     private nonisolated(unsafe) let captureSession = AVCaptureSession()
-    private nonisolated(unsafe) var videoOutput = AVCaptureVideoDataOutput()
     private nonisolated(unsafe) var photoOutput = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "com.cardshowpro.camera")
     private var currentCamera: AVCaptureDevice?
 
     // Photo capture state
     private var photoContinuation: CheckedContinuation<UIImage, Error>?
-
-    // MARK: - Frame Throttling
-    private let frameThrottler = FrameThrottler(fps: 15.0)
 
     // MARK: - State
     enum SessionState {
@@ -32,39 +28,7 @@ final class CameraManager: NSObject, @unchecked Sendable {
     var previewLayer: AVCaptureVideoPreviewLayer?
     var isSessionRunning = false
     var authorizationStatus: AVAuthorizationStatus = .notDetermined
-    var detectedCardFrame: CGRect?
-    var cardDetectionConfidence: Float = 0.0
-    var isCardDetected: Bool = false
-    var lastCapturedImage: UIImage?
     var isFlashOn = false
-
-    // MARK: - Detection State
-    enum DetectionState {
-        case searching
-        case cardFound
-        case readyToCapture
-        case capturing
-
-        var message: String {
-            switch self {
-            case .searching: return "Position card in frame"
-            case .cardFound: return "Hold steady..."
-            case .readyToCapture: return "Perfect! Auto-scanning..."
-            case .capturing: return "Captured!"
-            }
-        }
-
-        var color: Color {
-            switch self {
-            case .searching: return .red
-            case .cardFound: return .yellow
-            case .readyToCapture: return .green
-            case .capturing: return .blue
-            }
-        }
-    }
-
-    var detectionState: DetectionState = .searching
 
     // MARK: - Initialization
     override init() {
@@ -97,30 +61,42 @@ final class CameraManager: NSObject, @unchecked Sendable {
 
     // MARK: - Setup
     func setupCaptureSession() async {
+        print("🎥 DEBUG: Starting setupCaptureSession")
+        print("🎥 DEBUG: Authorization status: \(authorizationStatus)")
+
         guard authorizationStatus == .authorized else {
+            print("❌ DEBUG: Authorization not granted - status: \(authorizationStatus)")
             await MainActor.run {
                 sessionState = .failed(NSError(domain: "CameraManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Camera not authorized"]))
             }
             return
         }
 
+        print("✅ DEBUG: Authorization granted, proceeding with setup")
         await MainActor.run {
             sessionState = .configuring
         }
+        print("🎥 DEBUG: Session state set to .configuring")
 
         // Run configuration on session queue
+        print("🎥 DEBUG: Entering session queue for configuration")
         await withCheckedContinuation { continuation in
             sessionQueue.async { [weak self] in
+                print("🎥 DEBUG: Inside sessionQueue.async")
                 guard let self = self else {
+                    print("❌ DEBUG: self is nil in sessionQueue")
                     continuation.resume()
                     return
                 }
 
+                print("🎥 DEBUG: Beginning session configuration")
                 self.captureSession.beginConfiguration()
                 self.captureSession.sessionPreset = .photo
 
                 // Add video input
+                print("🎥 DEBUG: Looking for back camera device...")
                 guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                    print("❌ DEBUG: Back camera NOT found!")
                     self.captureSession.commitConfiguration()
                     Task { @MainActor in
                         self.sessionState = .failed(NSError(domain: "CameraManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "Camera not available"]))
@@ -128,17 +104,25 @@ final class CameraManager: NSObject, @unchecked Sendable {
                     continuation.resume()
                     return
                 }
+                print("✅ DEBUG: Back camera found: \(camera.localizedName)")
 
                 do {
+                    print("🎥 DEBUG: Creating AVCaptureDeviceInput...")
                     let input = try AVCaptureDeviceInput(device: camera)
+                    print("✅ DEBUG: AVCaptureDeviceInput created")
+
                     if self.captureSession.canAddInput(input) {
+                        print("🎥 DEBUG: Adding video input to session...")
                         self.captureSession.addInput(input)
+                        print("✅ DEBUG: Video input added successfully")
                         Task { @MainActor in
                             self.currentCamera = camera
                         }
+                    } else {
+                        print("❌ DEBUG: canAddInput returned false - session cannot accept input")
                     }
                 } catch {
-                    print("Error setting up camera input: \(error)")
+                    print("❌ DEBUG: Error creating camera input: \(error.localizedDescription)")
                     self.captureSession.commitConfiguration()
                     Task { @MainActor in
                         self.sessionState = .failed(error)
@@ -147,64 +131,72 @@ final class CameraManager: NSObject, @unchecked Sendable {
                     return
                 }
 
-                // Add video output
-                self.videoOutput.setSampleBufferDelegate(self, queue: self.sessionQueue)
-                self.videoOutput.alwaysDiscardsLateVideoFrames = true
-                self.videoOutput.videoSettings = [
-                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-                ]
-
-                if self.captureSession.canAddOutput(self.videoOutput) {
-                    self.captureSession.addOutput(self.videoOutput)
-                }
-
-                // Configure video connection
-                if let connection = self.videoOutput.connection(with: .video) {
-                    if #available(iOS 17.0, *) {
-                        connection.videoRotationAngle = 90
-                    } else {
-                        connection.videoOrientation = .portrait
-                    }
-                }
-
                 // Add photo output for high-quality capture
+                print("🎥 DEBUG: Adding photo output...")
                 if self.captureSession.canAddOutput(self.photoOutput) {
                     self.captureSession.addOutput(self.photoOutput)
+                    print("✅ DEBUG: Photo output added successfully")
 
                     // Configure photo output for highest quality
                     self.photoOutput.isHighResolutionCaptureEnabled = true
                     if #available(iOS 17.0, *) {
                         self.photoOutput.maxPhotoDimensions = camera.activeFormat.supportedMaxPhotoDimensions.first ?? CMVideoDimensions(width: 0, height: 0)
                     }
+                    print("🎥 DEBUG: Photo output configured for high resolution")
+                } else {
+                    print("❌ DEBUG: canAddOutput returned false - cannot add photo output")
                 }
 
+                print("🎥 DEBUG: Committing session configuration...")
                 self.captureSession.commitConfiguration()
+                print("✅ DEBUG: Session configuration committed")
 
                 // Configuration complete
                 Task { @MainActor in
                     self.sessionState = .configured
+                    print("🎥 DEBUG: Session state set to .configured")
                 }
 
                 continuation.resume()
+                print("🎥 DEBUG: Continuation resumed - exiting sessionQueue")
             }
         }
 
         // Create preview layer on main thread
+        print("🎥 DEBUG: Creating AVCaptureVideoPreviewLayer...")
         let preview = AVCaptureVideoPreviewLayer(session: captureSession)
         preview.videoGravity = .resizeAspectFill
+        print("🎥 DEBUG: Preview layer created with videoGravity: \(preview.videoGravity)")
+        print("🎥 DEBUG: Assigning preview layer to self.previewLayer...")
         previewLayer = preview
+        print("✅ DEBUG: Preview layer assigned! previewLayer = \(String(describing: previewLayer))")
+        print("🎥 DEBUG: setupCaptureSession() complete")
     }
 
     // MARK: - Session Control
     nonisolated func startSession() {
         Task { @MainActor in
-            guard !self.isSessionRunning else { return }
+            print("🎥 DEBUG: startSession() called")
+            guard !self.isSessionRunning else {
+                print("⚠️ DEBUG: Session already running, skipping")
+                return
+            }
 
+            print("🎥 DEBUG: Dispatching captureSession.startRunning() to sessionQueue...")
             self.sessionQueue.async { [captureSession] in
+                print("🎥 DEBUG: Inside sessionQueue - calling startRunning()...")
                 captureSession.startRunning()
+                print("🎥 DEBUG: startRunning() called")
+                print("🎥 DEBUG: Session isRunning: \(captureSession.isRunning)")
+
                 Task { @MainActor [weak self] in
-                    self?.isSessionRunning = true
-                    self?.sessionState = .running
+                    guard let self = self else {
+                        print("❌ DEBUG: self is nil when setting isSessionRunning")
+                        return
+                    }
+                    self.isSessionRunning = true
+                    self.sessionState = .running
+                    print("✅ DEBUG: Session state set to .running, isSessionRunning = true")
                 }
             }
         }
@@ -237,9 +229,9 @@ final class CameraManager: NSObject, @unchecked Sendable {
                 settings.photoQualityPrioritization = .quality
             }
 
-            // Disable flash for now (can be enabled later if needed)
-            if photoOutput.supportedFlashModes.contains(.off) {
-                settings.flashMode = .off
+            // Configure flash based on isFlashOn state
+            if photoOutput.supportedFlashModes.contains(isFlashOn ? .on : .off) {
+                settings.flashMode = isFlashOn ? .on : .off
             }
 
             // Enable high-resolution capture
@@ -261,115 +253,57 @@ final class CameraManager: NSObject, @unchecked Sendable {
     }
 
     // MARK: - Flash Control
-    func toggleFlash() {
-        guard let camera = currentCamera, camera.hasTorch else { return }
+    nonisolated func toggleFlash() {
+        Task { @MainActor in
+            guard let camera = self.currentCamera, camera.hasTorch else { return }
 
-        do {
-            try camera.lockForConfiguration()
+            // Run camera configuration on background queue to avoid blocking UI
+            self.sessionQueue.async {
+                do {
+                    try camera.lockForConfiguration()
 
-            if camera.torchMode == .off {
-                camera.torchMode = .on
-                isFlashOn = true
-            } else {
-                camera.torchMode = .off
-                isFlashOn = false
+                    if camera.torchMode == .off {
+                        camera.torchMode = .on
+                        Task { @MainActor [weak self] in
+                            self?.isFlashOn = true
+                        }
+                    } else {
+                        camera.torchMode = .off
+                        Task { @MainActor [weak self] in
+                            self?.isFlashOn = false
+                        }
+                    }
+
+                    camera.unlockForConfiguration()
+                } catch {
+                    print("Error toggling flash: \(error)")
+                }
             }
-
-            camera.unlockForConfiguration()
-        } catch {
-            print("Error toggling flash: \(error)")
         }
     }
 
-    func setFlash(enabled: Bool) {
-        guard let camera = currentCamera, camera.hasTorch else { return }
+    nonisolated func setFlash(enabled: Bool) {
+        Task { @MainActor in
+            guard let camera = self.currentCamera, camera.hasTorch else { return }
 
-        do {
-            try camera.lockForConfiguration()
-            camera.torchMode = enabled ? .on : .off
-            isFlashOn = enabled
-            camera.unlockForConfiguration()
-        } catch {
-            print("Error setting flash: \(error)")
+            // Run camera configuration on background queue to avoid blocking UI
+            self.sessionQueue.async {
+                do {
+                    try camera.lockForConfiguration()
+                    camera.torchMode = enabled ? .on : .off
+                    Task { @MainActor [weak self] in
+                        self?.isFlashOn = enabled
+                    }
+                    camera.unlockForConfiguration()
+                } catch {
+                    print("Error setting flash: \(error)")
+                }
+            }
         }
     }
 
     var hasFlash: Bool {
         currentCamera?.hasTorch ?? false
-    }
-}
-
-// MARK: - Video Output Delegate
-extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
-    nonisolated func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        // Throttle to 15 FPS to reduce CPU usage
-        Task {
-            guard await frameThrottler.shouldProcess() else { return }
-
-            // Convert sample buffer to image
-            guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-            let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-            let context = CIContext()
-
-            guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
-            let image = UIImage(cgImage: cgImage)
-
-            // Update last captured image on main thread
-            await MainActor.run {
-                self.lastCapturedImage = image
-            }
-
-            // Perform card detection
-            detectCard(in: imageBuffer)
-        }
-    }
-
-    // MARK: - Card Detection with Vision
-    private nonisolated func detectCard(in pixelBuffer: CVPixelBuffer) {
-        let request = VNDetectRectanglesRequest { request, error in
-            guard let results = request.results as? [VNRectangleObservation],
-                  let firstRect = results.first else {
-                DispatchQueue.main.async {
-                    self.isCardDetected = false
-                    self.detectionState = .searching
-                    self.detectedCardFrame = nil
-                }
-                return
-            }
-
-            // Convert normalized coordinates to screen coordinates
-            let boundingBox = firstRect.boundingBox
-            let confidence = firstRect.confidence
-
-            DispatchQueue.main.async {
-                self.cardDetectionConfidence = confidence
-                self.isCardDetected = confidence > 0.6
-                self.detectedCardFrame = boundingBox
-
-                // Update detection state based on confidence
-                if confidence > 0.85 {
-                    self.detectionState = .readyToCapture
-                } else if confidence > 0.6 {
-                    self.detectionState = .cardFound
-                } else {
-                    self.detectionState = .searching
-                }
-            }
-        }
-
-        // Configure rectangle detection for trading cards
-        request.minimumAspectRatio = 0.5  // Cards are roughly 2.5:3.5 ratio
-        request.maximumAspectRatio = 0.8
-        request.minimumSize = 0.2  // Card should take up at least 20% of frame
-        request.maximumObservations = 1
-
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-        try? handler.perform([request])
     }
 }
 
