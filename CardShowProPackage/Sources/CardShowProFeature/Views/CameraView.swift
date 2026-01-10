@@ -9,6 +9,7 @@ struct CameraView: View {
     @State private var cameraManager = CameraManager()
     @State private var scanSession = ScanSession()
     @State private var selectedMode: ScanMode = .negotiator
+    @State private var selectedGame: CardGame = .pokemon
     @State private var showSettings = false
     @State private var autoCapture = true
 
@@ -201,7 +202,12 @@ struct CameraView: View {
         .sheet(isPresented: $showSettings) {
             settingsSheet
         }
-        .sheet(isPresented: $showConfirmation) {
+        .sheet(isPresented: $showConfirmation, onDismiss: {
+            // Defensive state reset when sheet dismisses (covers any edge cases)
+            isRecognizing = false
+            showSuccessAnimation = false
+            scanSession.isProcessing = false
+        }) {
             if let cardImage = pendingCardImage,
                let recognition = pendingRecognition {
                 CardConfirmationView(
@@ -212,10 +218,13 @@ struct CameraView: View {
                         saveConfirmedCard(recognition: confirmedRecognition, pricing: confirmedPricing, image: cardImage)
                     },
                     onRescan: {
-                        // Reset pending state for rescan
+                        // Reset all pending and loading state for rescan
                         pendingCardImage = nil
                         pendingRecognition = nil
                         pendingPricing = nil
+                        isRecognizing = false
+                        showSuccessAnimation = false
+                        scanSession.isProcessing = false
                         cameraManager.detectionState = .searching
                     }
                 )
@@ -252,9 +261,37 @@ struct CameraView: View {
                 .frame(height: 20)
 
             HStack {
+                // Game Selector (left side)
+                Menu {
+                    ForEach(CardGame.supported, id: \.self) { game in
+                        Button {
+                            selectedGame = game
+                            HapticManager.shared.light()
+                        } label: {
+                            Label(game.displayName, systemImage: game.icon)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: selectedGame.icon)
+                            .font(.headline)
+                        Text(selectedGame.displayName)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.5))
+                    .clipShape(Capsule())
+                }
+
                 Spacer()
 
-                // Mode Picker
+                // Mode Picker (right side)
                 Menu {
                     ForEach(ScanMode.allCases, id: \.self) { mode in
                         Button {
@@ -282,8 +319,6 @@ struct CameraView: View {
                     .background(Color.black.opacity(0.5))
                     .clipShape(Capsule())
                 }
-
-                Spacer()
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -554,7 +589,7 @@ struct CameraView: View {
                 loadingStatus = "Recognizing card..."
 
                 // Step 2: Recognize card from image
-                let recognition = try await recognitionService.recognizeCard(from: image)
+                let recognition = try await recognitionService.recognizeCard(from: image, game: selectedGame)
 
                 // Update loading status
                 loadingStatus = "Fetching prices..."
@@ -637,6 +672,11 @@ struct CameraView: View {
     }
 
     private func handleSuccessAnimationComplete() {
+        // Hide success animation
+        withAnimation {
+            showSuccessAnimation = false
+        }
+
         // Show confirmation sheet after success animation
         showConfirmation = true
     }
@@ -817,7 +857,7 @@ struct CameraView: View {
 
         do {
             // Recognize card from gallery image
-            let recognition = try await recognitionService.recognizeCard(from: image)
+            let recognition = try await recognitionService.recognizeCard(from: image, game: selectedGame)
 
             loadingStatus = "Fetching prices..."
 
@@ -847,6 +887,7 @@ struct CameraView: View {
                 setName: "Unknown Set",
                 cardNumber: "???",
                 confidence: 0.0,
+                game: selectedGame,
                 rarity: nil,
                 cardType: nil,
                 subtype: nil,

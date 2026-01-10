@@ -6,6 +6,7 @@ struct RecognitionResult: Codable, Sendable {
     let setName: String
     let cardNumber: String
     let confidence: Double
+    let game: CardGame
     let rarity: String?
     let cardType: String?
     let subtype: String?
@@ -93,7 +94,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
     }
 
     /// Convert Ximilar response to our RecognitionResult
-    func toRecognitionResult() -> RecognitionResult? {
+    func toRecognitionResult(game: CardGame) -> RecognitionResult? {
         // Check overall response status
         guard status?.code == 200 else {
             return nil
@@ -153,6 +154,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
                 setName: setName,
                 cardNumber: cardNumber,
                 confidence: confidence,
+                game: game,
                 rarity: rarity,
                 cardType: cardType,
                 subtype: subtype,
@@ -165,6 +167,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
             setName: setName,
             cardNumber: cardNumber,
             confidence: confidence,
+            game: game,
             rarity: rarity,
             cardType: cardType,
             subtype: subtype,

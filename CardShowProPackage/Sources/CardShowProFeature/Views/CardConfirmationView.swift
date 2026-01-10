@@ -7,6 +7,7 @@ struct CardConfirmationView: View {
     let cardImage: UIImage
     let recognitionResult: RecognitionResult
     let pricing: CardPricing?
+    let slabResult: SlabRecognitionResult?
 
     var onConfirm: (RecognitionResult, CardPricing?) -> Void
     var onRescan: () -> Void
@@ -20,12 +21,14 @@ struct CardConfirmationView: View {
         cardImage: UIImage,
         recognitionResult: RecognitionResult,
         pricing: CardPricing?,
+        slabResult: SlabRecognitionResult? = nil,
         onConfirm: @escaping (RecognitionResult, CardPricing?) -> Void,
         onRescan: @escaping () -> Void
     ) {
         self.cardImage = cardImage
         self.recognitionResult = recognitionResult
         self.pricing = pricing
+        self.slabResult = slabResult
         self.onConfirm = onConfirm
         self.onRescan = onRescan
 
@@ -45,6 +48,11 @@ struct CardConfirmationView: View {
 
                     // Confidence Badge
                     confidenceBadge
+
+                    // Grading Section (for graded slabs)
+                    if let slabResult = slabResult, slabResult.isGraded {
+                        gradingSection
+                    }
 
                     // Card Details
                     cardDetailsSection
@@ -143,6 +151,189 @@ struct CardConfirmationView: View {
         case .medium: return "Please verify card details before adding"
         case .low: return "Low confidence - review all information carefully"
         default: return ""
+        }
+    }
+
+    // MARK: - Grading Section
+
+    private var gradingSection: some View {
+        VStack(spacing: 16) {
+            // Grading Header
+            HStack {
+                Image(systemName: "seal.fill")
+                    .font(.headline)
+                    .foregroundStyle(gradingCompanyColor)
+
+                Text("Graded Card")
+                    .font(.headline)
+
+                Spacer()
+
+                if let company = slabResult?.gradingCompany {
+                    Text(company.displayName)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(gradingCompanyColor)
+                        .clipShape(Capsule())
+                }
+            }
+
+            VStack(spacing: 12) {
+                // Grade
+                if let grade = slabResult?.grade {
+                    ConfirmationDetailRow(label: "Grade", icon: "star.fill") {
+                        HStack {
+                            Text(grade)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(gradingCompanyColor)
+
+                            Spacer()
+
+                            // Grade badge
+                            gradeQualityBadge(for: grade)
+                        }
+                    }
+                }
+
+                // Certification Number
+                if let certNumber = slabResult?.certificationNumber {
+                    ConfirmationDetailRow(label: "Certification #", icon: "number.circle.fill") {
+                        HStack {
+                            Text(certNumber)
+                                .font(.body)
+                                .fontWeight(.medium)
+                                .textSelection(.enabled)
+
+                            Spacer()
+
+                            Button {
+                                UIPasteboard.general.string = certNumber
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                }
+
+                // Sub-grades (BGS only)
+                if let subGrades = slabResult?.subGrades {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Sub-Grades")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 8) {
+                            if let centering = subGrades.centering {
+                                subGradeCard(label: "Centering", grade: centering)
+                            }
+                            if let corners = subGrades.corners {
+                                subGradeCard(label: "Corners", grade: corners)
+                            }
+                            if let edges = subGrades.edges {
+                                subGradeCard(label: "Edges", grade: edges)
+                            }
+                            if let surface = subGrades.surface {
+                                subGradeCard(label: "Surface", grade: surface)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private var gradingCompanyColor: Color {
+        guard let company = slabResult?.gradingCompany else {
+            return .blue
+        }
+
+        switch company {
+        case .psa: return Color(red: 0.85, green: 0.15, blue: 0.15) // PSA Red
+        case .bgs: return Color(red: 0.0, green: 0.4, blue: 0.8) // BGS Blue
+        case .cgc: return Color(red: 0.95, green: 0.6, blue: 0.0) // CGC Orange
+        }
+    }
+
+    private func gradeQualityBadge(for grade: String) -> some View {
+        let qualityText: String
+        let qualityColor: Color
+
+        // Parse numeric grade
+        let numericGrade = Double(grade.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()) ?? 0
+
+        switch numericGrade {
+        case 10:
+            qualityText = "GEM MINT"
+            qualityColor = .green
+        case 9.5:
+            qualityText = "MINT+"
+            qualityColor = .green
+        case 9:
+            qualityText = "MINT"
+            qualityColor = .blue
+        case 8.5:
+            qualityText = "NM/MT+"
+            qualityColor = .blue
+        case 8:
+            qualityText = "NM/MT"
+            qualityColor = .blue
+        case 7...7.5:
+            qualityText = "NM"
+            qualityColor = .orange
+        default:
+            qualityText = "GRADED"
+            qualityColor = .gray
+        }
+
+        return Text(qualityText)
+            .font(.caption2)
+            .fontWeight(.bold)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(qualityColor)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private func subGradeCard(label: String, grade: Double) -> some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Text(String(format: "%.1f", grade))
+                .font(.body)
+                .fontWeight(.bold)
+                .foregroundStyle(subGradeColor(for: grade))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(Color(uiColor: .tertiarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func subGradeColor(for grade: Double) -> Color {
+        switch grade {
+        case 10: return .green
+        case 9.5: return .blue
+        case 9: return .blue
+        case 8...8.5: return .orange
+        default: return .gray
         }
     }
 
@@ -278,6 +469,7 @@ struct CardConfirmationView: View {
             setName: setName,
             cardNumber: cardNumber,
             confidence: recognitionResult.confidence,
+            game: recognitionResult.game,
             rarity: recognitionResult.rarity,
             cardType: recognitionResult.cardType,
             subtype: recognitionResult.subtype,
@@ -336,6 +528,7 @@ private struct ConfirmationDetailRow<Content: View>: View {
             setName: "Darkness Ablaze",
             cardNumber: "020",
             confidence: 0.94,
+            game: .pokemon,
             rarity: "Rare Holo VMAX",
             cardType: "Pokemon",
             subtype: nil,

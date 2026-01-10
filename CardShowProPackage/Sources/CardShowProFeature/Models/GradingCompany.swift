@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents grading companies with their specific fee structures
-enum GradingCompany: String, CaseIterable, Identifiable, Sendable {
+enum GradingCompany: String, CaseIterable, Identifiable, Codable, Sendable {
     case psa = "PSA"
     case bgs = "BGS"
     case cgc = "CGC"

@@ -9,6 +9,7 @@ public final class InventoryCard {
     public var cardName: String
     public var cardNumber: String
     public var setName: String
+    public var gameType: String // Store as String for SwiftData compatibility
     public var estimatedValue: Double
     public var confidence: Double
     public var timestamp: Date
@@ -21,6 +22,7 @@ public final class InventoryCard {
         cardName: String,
         cardNumber: String,
         setName: String,
+        gameType: String = CardGame.pokemon.rawValue,
         estimatedValue: Double,
         confidence: Double,
         timestamp: Date = Date(),
@@ -30,6 +32,7 @@ public final class InventoryCard {
         self.cardName = cardName
         self.cardNumber = cardNumber
         self.setName = setName
+        self.gameType = gameType
         self.estimatedValue = estimatedValue
         self.confidence = confidence
         self.timestamp = timestamp
@@ -46,6 +49,7 @@ public final class InventoryCard {
             cardName: scannedCard.cardName,
             cardNumber: scannedCard.cardNumber,
             setName: scannedCard.setName,
+            gameType: scannedCard.game.rawValue,
             estimatedValue: scannedCard.estimatedValue,
             confidence: scannedCard.confidence,
             timestamp: scannedCard.timestamp,
@@ -57,5 +61,10 @@ public final class InventoryCard {
     public var image: UIImage? {
         guard let imageData else { return nil }
         return UIImage(data: imageData)
+    }
+
+    /// Get the CardGame enum from the stored string
+    public var game: CardGame {
+        CardGame(rawValue: gameType) ?? .pokemon
     }
 }

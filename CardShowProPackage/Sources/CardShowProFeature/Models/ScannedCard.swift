@@ -9,6 +9,7 @@ struct ScannedCard: Identifiable, Sendable {
     var cardName: String
     var cardNumber: String
     var setName: String
+    var game: CardGame
     var estimatedValue: Double
     var confidence: Double // 0.0 to 1.0 for AI confidence
 
@@ -19,6 +20,7 @@ struct ScannedCard: Identifiable, Sendable {
         cardName: String = "Unknown Card",
         cardNumber: String = "",
         setName: String = "",
+        game: CardGame = .pokemon,
         estimatedValue: Double = 0.0,
         confidence: Double = 0.0
     ) {
@@ -28,6 +30,7 @@ struct ScannedCard: Identifiable, Sendable {
         self.cardName = cardName
         self.cardNumber = cardNumber
         self.setName = setName
+        self.game = game
         self.estimatedValue = estimatedValue
         self.confidence = confidence
     }

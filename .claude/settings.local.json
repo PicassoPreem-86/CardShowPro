@@ -5,7 +5,12 @@
       "Bash(cloc:*)",
       "Bash(find:*)",
       "WebFetch(domain:getcollectr.com)",
-      "WebFetch(domain:apps.apple.com)"
+      "WebFetch(domain:apps.apple.com)",
+      "WebFetch(domain:www.ximilar.com)",
+      "WebFetch(domain:docs.ximilar.com)",
+      "WebFetch(domain:developer.tcgplayer.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:fortierq.github.io)"
     ],
     "deny": [],
     "ask": []
