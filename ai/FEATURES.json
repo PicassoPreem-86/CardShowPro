@@ -1,0 +1,116 @@
+{
+  "features": [
+    {
+      "id": "F001",
+      "name": "Card Recognition API Integration",
+      "description": "Replace mock card data with real card recognition API to scan and identify trading cards",
+      "acceptance": [
+        "Camera captures card image and sends to recognition API",
+        "API returns card name, set, condition, and estimated value",
+        "App displays recognized card details in scanned cards carousel",
+        "Error states show when API fails or card not recognized",
+        "Loading indicator displays while API processes image",
+        "API keys stored securely in Keychain"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F002",
+      "name": "SwiftData Persistence for Scanned Cards",
+      "description": "Add data persistence so scanned cards are saved and survive app restarts",
+      "acceptance": [
+        "ScannedCard model persists to SwiftData",
+        "Cards remain after app is closed and reopened",
+        "CardListView reads from SwiftData and displays all saved cards",
+        "Dashboard stats accurately reflect persisted card data",
+        "App launches and loads existing data without crashes"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F003",
+      "name": "Inventory Management in CardListView",
+      "description": "Build functional inventory list with search, filter, and card management features",
+      "acceptance": [
+        "CardListView displays all scanned cards in scrollable list",
+        "User can search cards by name",
+        "User can filter by value range, card type, or date added",
+        "User can sort by name, value, or date",
+        "Tapping a card shows detail view with edit capability",
+        "User can delete cards from inventory",
+        "Empty state shows when no cards exist"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F004",
+      "name": "Comprehensive Error Handling",
+      "description": "Add proper error states and user feedback for all async operations",
+      "acceptance": [
+        "Camera permission denied shows helpful alert with Settings link",
+        "Network errors display retry option",
+        "API errors show user-friendly messages",
+        "Failed card scans provide clear feedback",
+        "Loading indicators show during all async operations",
+        "Success confirmations appear for completed actions"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F005",
+      "name": "Trade Analyzer Tool",
+      "description": "Tool to compare two sets of cards and calculate trade fairness",
+      "acceptance": [
+        "User can add cards to 'my side' and 'their side'",
+        "Tool calculates total value for each side",
+        "Shows value difference and percentage",
+        "User can add notes about the trade",
+        "Trade can be saved to history",
+        "User can scan cards directly into trade sides"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F006",
+      "name": "Sales Calculator Tool",
+      "description": "Calculate net profit after fees, shipping, and taxes for card sales",
+      "acceptance": [
+        "User can input card price",
+        "User can select platform (eBay, TCGPlayer, etc.)",
+        "Calculator shows platform fees, shipping, processing fees",
+        "Net profit calculated and displayed",
+        "User can save platform presets",
+        "User can compare multiple platforms side-by-side"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F007",
+      "name": "Analytics Dashboard",
+      "description": "Display inventory statistics and trends with charts",
+      "acceptance": [
+        "Charts show total inventory value over time",
+        "Display most valuable cards in collection",
+        "Show card acquisition trends",
+        "User can filter by date range",
+        "Charts update when new cards added",
+        "Analytics export to PDF or CSV"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F008",
+      "name": "Settings & Preferences",
+      "description": "Expand settings view with user preferences and configuration",
+      "acceptance": [
+        "User can set default currency",
+        "User can configure auto-capture settings",
+        "User can enable/disable haptic feedback",
+        "Settings persist across app launches",
+        "About screen shows app version",
+        "User can export/import data"
+      ],
+      "passes": false
+    }
+  ]
+}
