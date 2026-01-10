@@ -1,6 +1,29 @@
-# CardShowPro - iOS App
+# CardShow Pro
 
-A modern iOS application using a **workspace + SPM package** architecture for clean separation between app shell and feature code.
+**AI-Powered Trading Card Scanner & Inventory Management for iOS**
+
+CardShow Pro is a professional-grade iOS application designed for trading card dealers and collectors. It combines AI-powered card recognition with comprehensive inventory management, pricing tools, and analytics to help you manage your card business efficiently.
+
+**Current Status**: v0.1.0 - Early development (scaffold complete, core features in progress)
+
+## Features
+
+### Completed
+- Dashboard with inventory statistics and quick actions
+- Camera scanning interface with real-time card detection
+- Tab-based navigation (Dashboard, Inventory, Scan, Tools)
+- Dark mode optimized UI
+- Modern SwiftUI architecture
+
+### In Development
+- Card recognition API integration
+- Data persistence with SwiftData
+- Inventory management system
+- Trade analyzer
+- Sales calculator
+- Analytics dashboard
+
+See [TODO.md](./TODO.md) for complete roadmap.
 
 ## AI Assistant Rules Files
 
@@ -121,5 +144,121 @@ To include assets in your feature package:
 )
 ```
 
-### Generated with XcodeBuildMCP
-This project was scaffolded using [XcodeBuildMCP](https://github.com/cameroncooke/XcodeBuildMCP), which provides tools for AI-assisted iOS development workflows.
+## Quick Start
+
+### Prerequisites
+- Xcode 16.0 or later
+- macOS Sonoma (14.0) or later
+- iOS 17.0+ device or simulator
+
+### Running the App
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd CardshowPro
+   ```
+
+2. **Open the workspace** (not the project!)
+   ```bash
+   open CardShowPro.xcworkspace
+   ```
+
+3. **Select a simulator** or connect a device
+   - For camera testing: Use a physical iOS device (camera doesn't work in simulator)
+   - For UI testing: Any iPhone simulator (iPhone 15 Pro recommended)
+
+4. **Build and run**
+   - Press `Cmd+R` or click the Run button
+   - First build may take 1-2 minutes
+
+## Documentation
+
+This project includes comprehensive documentation for developers and AI coding assistants:
+
+### For Developers
+- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Complete development guide with workflows, patterns, and best practices
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - How to contribute to this project
+- **[TODO.md](./TODO.md)** - Development roadmap with all planned features
+- **[CHANGELOG.md](./CHANGELOG.md)** - Version history and release notes
+
+### For Understanding the Project
+- **[PROJECT_STATUS.md](./PROJECT_STATUS.md)** - Current state, completed features, and known issues
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Technical architecture, design patterns, and data flow
+
+### For AI Coding Assistants
+- **[CLAUDE.md](./CLAUDE.md)** - Claude Code rules and standards
+- **[.github/copilot-instructions.md](./.github/copilot-instructions.md)** - GitHub Copilot rules
+
+**Important**: Future agents MUST read PROJECT_STATUS.md and ARCHITECTURE.md before making changes to understand the current state and design patterns.
+
+## Technology Stack
+
+- **Language**: Swift 6.1+ with strict concurrency
+- **UI Framework**: SwiftUI (iOS 17.0+)
+- **Architecture**: MV (Model-View) pattern using @Observable
+- **Concurrency**: Swift Concurrency (async/await, actors, @MainActor)
+- **Testing**: Swift Testing framework (@Test, #expect)
+- **Package Management**: Swift Package Manager (SPM)
+- **Build System**: Workspace + SPM architecture
+- **Camera**: AVFoundation + Vision framework
+
+## Project Structure
+
+```
+CardShowPro/
+├── CardShowPro.xcworkspace/          # Main workspace (OPEN THIS)
+├── CardShowPro.xcodeproj/            # App shell project
+├── CardShowPro/                      # App target
+│   ├── Assets.xcassets/             # App icon, colors
+│   └── CardShowProApp.swift         # App entry point
+├── CardShowProPackage/               # 🚀 ALL DEVELOPMENT HERE
+│   ├── Package.swift                # Package configuration
+│   ├── Sources/CardShowProFeature/
+│   │   ├── ContentView.swift        # Main tab view
+│   │   ├── Models/                  # Data models
+│   │   │   ├── AppState.swift       # App-wide state
+│   │   │   ├── ScannedCard.swift    # Card models
+│   │   │   └── CameraManager.swift  # Camera logic
+│   │   └── Views/                   # SwiftUI views
+│   │       ├── DashboardView.swift  # ✓ Complete
+│   │       ├── CameraView.swift     # ✓ Complete
+│   │       ├── CardListView.swift   # ○ Placeholder
+│   │       ├── ToolsView.swift      # ○ Placeholder
+│   │       └── ...
+│   └── Tests/CardShowProFeatureTests/
+├── CardShowProUITests/               # UI automation tests
+├── Config/                           # Build configuration
+│   ├── Shared.xcconfig              # Common settings
+│   ├── Debug.xcconfig               # Debug config
+│   ├── Release.xcconfig             # Release config
+│   └── CardShowPro.entitlements     # App capabilities
+└── Documentation/
+    ├── README.md                    # This file
+    ├── PROJECT_STATUS.md            # Current state
+    ├── ARCHITECTURE.md              # Architecture docs
+    ├── DEVELOPMENT.md               # Development guide
+    ├── TODO.md                      # Roadmap
+    ├── CONTRIBUTING.md              # Contribution guide
+    ├── CHANGELOG.md                 # Version history
+    └── CLAUDE.md                    # AI coding standards
+```
+
+Legend: ✓ Complete, ○ Placeholder
+
+## License
+
+[Add license information here]
+
+## Credits
+
+- Scaffolded using [XcodeBuildMCP](https://github.com/cameroncooke/XcodeBuildMCP)
+- Built with SwiftUI and modern Swift practices
+
+---
+
+**For detailed development information, see [DEVELOPMENT.md](./DEVELOPMENT.md)**
+
+**For current project status, see [PROJECT_STATUS.md](./PROJECT_STATUS.md)**
+
+**For architecture details, see [ARCHITECTURE.md](./ARCHITECTURE.md)**
