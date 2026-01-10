@@ -1,8 +1,10 @@
 import SwiftUI
+import SwiftData
 import AVFoundation
 
 struct CameraView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var cameraManager = CameraManager()
     @State private var scanSession = ScanSession()
     @State private var selectedMode: ScanMode = .negotiator
@@ -365,7 +367,20 @@ struct CameraView: View {
                 confidence: 0.92
             )
 
+            // Add to scan session (temporary)
             scanSession.addCard(mockCard)
+
+            // IMPORTANT: Save to SwiftData for persistence
+            let inventoryCard = InventoryCard(from: mockCard)
+            modelContext.insert(inventoryCard)
+
+            // Automatically save
+            do {
+                try modelContext.save()
+            } catch {
+                print("Error saving card: \(error)")
+            }
+
             scanSession.isProcessing = false
 
             // Brief delay before ready for next capture

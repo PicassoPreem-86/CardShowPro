@@ -1,9 +1,24 @@
 import SwiftUI
+import SwiftData
 
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
+    @Query private var inventoryCards: [InventoryCard]
     @State private var showCamera = false
     @State private var showSettings = false
+
+    // Calculated stats from inventory
+    private var totalValue: Double {
+        inventoryCards.reduce(0) { $0 + $1.estimatedValue }
+    }
+
+    private var totalCount: Int {
+        inventoryCards.count
+    }
+
+    private var topCard: InventoryCard? {
+        inventoryCards.max(by: { $0.estimatedValue < $1.estimatedValue })
+    }
 
     var body: some View {
         @Bindable var appState = appState
@@ -94,24 +109,15 @@ struct DashboardView: View {
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text("$24,580")
+                Text("$\(String(format: "%.2f", totalValue))")
                     .font(.system(size: 42, weight: .bold))
                     .foregroundStyle(.white)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption)
-                    Text("+13.2%")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                }
-                .foregroundStyle(.green)
             }
 
             // Stats Row
             HStack(spacing: 32) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("1,793")
+                    Text("\(totalCount)")
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
@@ -120,28 +126,16 @@ struct DashboardView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("$26,100")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.green)
-                    Text("Monthly Sales")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up")
-                            .font(.caption2)
-                        Text("+$3,450")
-                            .font(.title3)
+                if let topCard {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("$\(String(format: "%.0f", topCard.estimatedValue))")
+                            .font(.title2)
                             .fontWeight(.bold)
+                            .foregroundStyle(.green)
+                        Text("Highest Value")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(.green)
-                    Text("vs Last Month")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.top, 8)
@@ -154,67 +148,78 @@ struct DashboardView: View {
             StatsCard(
                 icon: "square.stack.3d.up.fill",
                 iconColor: .blue,
-                value: "1,247",
-                label: "Total Raw Cards"
+                value: "\(totalCount)",
+                label: "Total Cards"
             )
 
             StatsCard(
-                icon: "sparkle",
+                icon: "dollarsign.circle.fill",
+                iconColor: .green,
+                value: "$\(String(format: "%.0f", totalValue))",
+                label: "Total Value"
+            )
+
+            StatsCard(
+                icon: "calendar",
                 iconColor: .purple,
-                value: "342",
-                label: "Total Graded Cards"
+                value: recentCardsCount,
+                label: "Added This Week"
             )
 
             StatsCard(
-                icon: "shippingbox.fill",
-                iconColor: .purple,
-                value: "48",
-                label: "Total Sealed Products"
-            )
-
-            StatsCard(
-                icon: "square.grid.2x2.fill",
+                icon: "chart.bar.fill",
                 iconColor: .cyan,
-                value: "156",
-                label: "Total Misc"
+                value: averageValue,
+                label: "Avg Card Value"
             )
         }
     }
 
+    private var recentCardsCount: String {
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let count = inventoryCards.filter { $0.timestamp >= weekAgo }.count
+        return "\(count)"
+    }
+
+    private var averageValue: String {
+        guard !inventoryCards.isEmpty else { return "$0" }
+        let avg = totalValue / Double(totalCount)
+        return "$\(String(format: "%.0f", avg))"
+    }
+
     // MARK: - Top Items
     private var topItemsSection: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            TopItemCard(
-                title: "Top Raw Card",
-                itemName: "Charizard ex",
-                value: "$450",
-                icon: "photo",
-                iconColor: .orange
-            )
+        let topCards = inventoryCards.sorted { $0.estimatedValue > $1.estimatedValue }.prefix(4)
 
-            TopItemCard(
-                title: "Top Graded",
-                itemName: "Charizard\nPSA 10",
-                value: "$8,500",
-                icon: "star.fill",
-                iconColor: .yellow
-            )
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            if !topCards.isEmpty {
+                ForEach(Array(topCards.enumerated()), id: \.element.id) { index, card in
+                    TopItemCard(
+                        title: "Top Card #\(index + 1)",
+                        itemName: card.cardName,
+                        value: "$\(String(format: "%.0f", card.estimatedValue))",
+                        icon: "photo",
+                        iconColor: topCardColor(for: index)
+                    )
+                }
+            } else {
+                TopItemCard(
+                    title: "No Cards Yet",
+                    itemName: "Start Scanning",
+                    value: "$0",
+                    icon: "camera.fill",
+                    iconColor: .gray
+                )
+            }
+        }
+    }
 
-            TopItemCard(
-                title: "Top Sealed Product",
-                itemName: "151 Booster Box",
-                value: "$285",
-                icon: "shippingbox.fill",
-                iconColor: .purple
-            )
-
-            TopItemCard(
-                title: "Top Misc Seller",
-                itemName: "Card Sleeves",
-                value: "$25",
-                icon: "briefcase.fill",
-                iconColor: .cyan
-            )
+    private func topCardColor(for index: Int) -> Color {
+        switch index {
+        case 0: return .yellow
+        case 1: return .orange
+        case 2: return .purple
+        default: return .cyan
         }
     }
 }

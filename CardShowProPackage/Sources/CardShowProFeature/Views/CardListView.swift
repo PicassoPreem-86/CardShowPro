@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct CardListView: View {
-    @Environment(ScanSession.self) private var scanSession
+    @Query(sort: \InventoryCard.timestamp, order: .reverse) private var inventoryCards: [InventoryCard]
+    @Environment(\.modelContext) private var modelContext
     @State private var searchText = ""
     @State private var filterMode: FilterMode = .all
 
@@ -19,8 +21,8 @@ struct CardListView: View {
         }
     }
 
-    var filteredCards: [ScannedCard] {
-        var cards = scanSession.scannedCards
+    var filteredCards: [InventoryCard] {
+        var cards = inventoryCards
 
         // Apply filter
         switch filterMode {
@@ -29,7 +31,8 @@ struct CardListView: View {
         case .highValue:
             cards = cards.filter { $0.estimatedValue > 100 }
         case .recent:
-            cards = cards.sorted { $0.timestamp > $1.timestamp }
+            // Already sorted by timestamp (most recent first)
+            break
         }
 
         // Apply search
@@ -98,10 +101,10 @@ struct CardListView: View {
     private var cardList: some View {
         List {
             ForEach(filteredCards) { card in
-                CardRow(card: card)
+                InventoryCardRow(card: card)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
-                            scanSession.removeCard(card)
+                            modelContext.delete(card)
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -136,19 +139,27 @@ struct FilterPill: View {
     }
 }
 
-struct CardRow: View {
-    let card: ScannedCard
+struct InventoryCardRow: View {
+    let card: InventoryCard
 
     var body: some View {
         HStack(spacing: 16) {
-            // Card Image Placeholder
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(.systemGray5))
-                .frame(width: 60, height: 80)
-                .overlay {
-                    Image(systemName: "photo")
-                        .foregroundStyle(.secondary)
-                }
+            // Card Image
+            if let image = card.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 60, height: 80)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.systemGray5))
+                    .frame(width: 60, height: 80)
+                    .overlay {
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
+            }
 
             // Card Info
             VStack(alignment: .leading, spacing: 4) {

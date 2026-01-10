@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import CardShowProFeature
 
 @main
@@ -7,5 +8,6 @@ struct CardShowProApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: InventoryCard.self)
     }
 }
