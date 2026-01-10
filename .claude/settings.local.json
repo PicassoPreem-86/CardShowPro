@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(cloc:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

@@ -7,12 +7,18 @@ struct ToolsView: View {
                 VStack(spacing: 16) {
                     // Trading & Analysis Tools
                     ToolSection(title: "Trading & Analysis") {
-                        ToolRow(
-                            icon: "arrow.left.arrow.right.circle.fill",
-                            title: "Trade Analyzer",
-                            description: "Compare card values in trades",
-                            color: .blue
-                        )
+                        NavigationLink {
+                            TradeAnalyzerView()
+                        } label: {
+                            ToolRow(
+                                icon: "arrow.left.arrow.right.circle.fill",
+                                title: "Trade Analyzer",
+                                description: "Compare card values in trades",
+                                color: .blue,
+                                isComingSoon: false
+                            )
+                        }
+                        .buttonStyle(.plain)
 
                         ToolRow(
                             icon: "chart.line.uptrend.xyaxis",
