@@ -10,6 +10,7 @@ final class CameraManager: NSObject, @unchecked Sendable {
     private let captureSession = AVCaptureSession()
     private var videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "com.cardshowpro.camera")
+    private var currentCamera: AVCaptureDevice?
 
     // MARK: - State
     var previewLayer: AVCaptureVideoPreviewLayer?
@@ -19,6 +20,7 @@ final class CameraManager: NSObject, @unchecked Sendable {
     var cardDetectionConfidence: Float = 0.0
     var isCardDetected: Bool = false
     var lastCapturedImage: UIImage?
+    var isFlashOn = false
 
     // MARK: - Detection State
     enum DetectionState {
@@ -95,6 +97,7 @@ final class CameraManager: NSObject, @unchecked Sendable {
                 let input = try AVCaptureDeviceInput(device: camera)
                 if captureSession.canAddInput(input) {
                     captureSession.addInput(input)
+                    currentCamera = camera
                 }
             } catch {
                 print("Error setting up camera input: \(error)")
@@ -161,6 +164,44 @@ final class CameraManager: NSObject, @unchecked Sendable {
     // MARK: - Manual Capture
     func capturePhoto() -> UIImage? {
         return lastCapturedImage
+    }
+
+    // MARK: - Flash Control
+    func toggleFlash() {
+        guard let camera = currentCamera, camera.hasTorch else { return }
+
+        do {
+            try camera.lockForConfiguration()
+
+            if camera.torchMode == .off {
+                camera.torchMode = .on
+                isFlashOn = true
+            } else {
+                camera.torchMode = .off
+                isFlashOn = false
+            }
+
+            camera.unlockForConfiguration()
+        } catch {
+            print("Error toggling flash: \(error)")
+        }
+    }
+
+    func setFlash(enabled: Bool) {
+        guard let camera = currentCamera, camera.hasTorch else { return }
+
+        do {
+            try camera.lockForConfiguration()
+            camera.torchMode = enabled ? .on : .off
+            isFlashOn = enabled
+            camera.unlockForConfiguration()
+        } catch {
+            print("Error setting flash: \(error)")
+        }
+    }
+
+    var hasFlash: Bool {
+        currentCamera?.hasTorch ?? false
     }
 }
 

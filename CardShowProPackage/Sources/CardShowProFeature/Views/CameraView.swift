@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AVFoundation
+import PhotosUI
 
 struct CameraView: View {
     @Environment(\.dismiss) private var dismiss
@@ -11,6 +12,27 @@ struct CameraView: View {
     @State private var showSettings = false
     @State private var autoCapture = true
     @State private var captureTimer: Timer?
+
+    // Card recognition services
+    @State private var recognitionService = CardRecognitionService.shared
+    @State private var pricingService = PricingService.shared
+
+    // Confirmation view state
+    @State private var showConfirmation = false
+    @State private var pendingCardImage: UIImage?
+    @State private var pendingRecognition: RecognitionResult?
+    @State private var pendingPricing: CardPricing?
+
+    // Photo picker state
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showPhotoPicker = false
+
+    // Loading state
+    @State private var isRecognizing = false
+    @State private var loadingStatus = "Recognizing card..."
+
+    // Success state
+    @State private var showSessionSuccess = false
 
     var body: some View {
         ZStack {
@@ -40,13 +62,23 @@ struct CameraView: View {
             // MARK: - Detection Overlay
             if cameraManager.isCardDetected, let frame = cameraManager.detectedCardFrame {
                 GeometryReader { geometry in
-                    CardDetectionFrame(
-                        frame: frame,
-                        geometrySize: geometry.size,
-                        detectionState: cameraManager.detectionState
-                    )
+                    ZStack {
+                        // Background dimming
+                        BackgroundDimming(
+                            detectionFrame: frame,
+                            geometrySize: geometry.size
+                        )
+
+                        // Detection frame
+                        CardDetectionFrame(
+                            frame: frame,
+                            geometrySize: geometry.size,
+                            detectionState: cameraManager.detectionState
+                        )
+                    }
                 }
                 .ignoresSafeArea()
+                .allowsHitTesting(false)
             }
 
             // MARK: - Main UI Overlay
@@ -66,7 +98,7 @@ struct CameraView: View {
                 bottomPanel
             }
 
-            // MARK: - Close Button
+            // MARK: - Close and Flash Buttons
             VStack {
                 HStack {
                     Button {
@@ -83,8 +115,31 @@ struct CameraView: View {
                     .padding()
 
                     Spacer()
+
+                    // Flash Toggle
+                    if cameraManager.hasFlash {
+                        Button {
+                            cameraManager.toggleFlash()
+                            let generator = UIImpactFeedbackGenerator(style: .light)
+                            generator.impactOccurred()
+                        } label: {
+                            Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(cameraManager.isFlashOn ? .yellow : .white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                        }
+                        .padding()
+                    }
                 }
                 Spacer()
+            }
+
+            // MARK: - Loading Overlay
+            if isRecognizing {
+                ScannerLoadingOverlay(status: loadingStatus)
             }
         }
         .statusBarHidden()
@@ -98,6 +153,35 @@ struct CameraView: View {
         }
         .sheet(isPresented: $showSettings) {
             settingsSheet
+        }
+        .sheet(isPresented: $showConfirmation) {
+            if let cardImage = pendingCardImage,
+               let recognition = pendingRecognition {
+                CardConfirmationView(
+                    cardImage: cardImage,
+                    recognitionResult: recognition,
+                    pricing: pendingPricing,
+                    onConfirm: { confirmedRecognition, confirmedPricing in
+                        saveConfirmedCard(recognition: confirmedRecognition, pricing: confirmedPricing, image: cardImage)
+                    },
+                    onRescan: {
+                        // Reset pending state for rescan
+                        pendingCardImage = nil
+                        pendingRecognition = nil
+                        pendingPricing = nil
+                        cameraManager.detectionState = .searching
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showSessionSuccess) {
+            ScanSessionSuccessView(
+                cardCount: scanSession.cardCount,
+                totalValue: scanSession.totalValue
+            ) {
+                showSessionSuccess = false
+                dismiss()
+            }
         }
     }
 
@@ -193,15 +277,18 @@ struct CameraView: View {
             // Action Bar
             HStack(spacing: 40) {
                 // Gallery Button
-                Button {
-                    // Pick from gallery
-                } label: {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Image(systemName: "photo.on.rectangle")
                         .font(.title3)
                         .foregroundStyle(.white)
                         .frame(width: 44, height: 44)
                         .background(Color.white.opacity(0.2))
                         .clipShape(Circle())
+                }
+                .onChange(of: selectedPhotoItem) { _, newItem in
+                    Task {
+                        await loadSelectedPhoto(newItem)
+                    }
                 }
 
                 // Settings Button
@@ -281,19 +368,19 @@ struct CameraView: View {
             }
             .frame(height: 100)
 
-            // Total Value
+            // Total Value with design system
             HStack {
                 Text("Total Value:")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(DesignSystem.Typography.bodySmall)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
                 Spacer()
                 Text("$\(String(format: "%.2f", scanSession.totalValue))")
-                    .font(.title3)
+                    .font(DesignSystem.Typography.heading3)
                     .fontWeight(.bold)
-                    .foregroundStyle(.cyan)
+                    .foregroundStyle(DesignSystem.Colors.cyan)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 4)
+            .padding(.horizontal, DesignSystem.Spacing.md)
+            .padding(.top, DesignSystem.Spacing.xxxs)
         }
         .padding(.bottom, 12)
         .background(Color.black.opacity(0.3))
@@ -333,11 +420,20 @@ struct CameraView: View {
     private func startAutoCapture() {
         guard autoCapture else { return }
 
-        captureTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+        // Check every 0.5s if card is ready to capture
+        // This gives user 1-2 seconds of "ready" state before auto-capture
+        captureTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor in
                 if self.cameraManager.detectionState == .readyToCapture,
                    !self.scanSession.isProcessing {
-                    self.performCapture()
+                    // Add small delay to prevent instant capture
+                    try? await Task.sleep(for: .seconds(1.0))
+
+                    // Re-check state after delay (card might have moved)
+                    if self.cameraManager.detectionState == .readyToCapture,
+                       !self.scanSession.isProcessing {
+                        self.performCapture()
+                    }
                 }
             }
         }
@@ -356,43 +452,181 @@ struct CameraView: View {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
 
-        // Simulate AI card recognition (replace with real API call)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            let mockCard = ScannedCard(
-                image: image,
-                cardName: "Pikachu VMAX",
-                cardNumber: "#044",
-                setName: "Vivid Voltage",
-                estimatedValue: Double.random(in: 50...500),
-                confidence: 0.92
-            )
+        // Perform card recognition with real API
+        Task {
+            // Show loading overlay
+            isRecognizing = true
+            loadingStatus = "Recognizing card..."
 
-            // Add to scan session (temporary)
-            scanSession.addCard(mockCard)
-
-            // IMPORTANT: Save to SwiftData for persistence
-            let inventoryCard = InventoryCard(from: mockCard)
-            modelContext.insert(inventoryCard)
-
-            // Automatically save
             do {
-                try modelContext.save()
+                // Step 1: Recognize card from image
+                let recognition = try await recognitionService.recognizeCard(from: image)
+
+                // Update loading status
+                loadingStatus = "Fetching prices..."
+
+                // Step 2: Fetch pricing (in parallel with showing confirmation)
+                async let pricing = try? await pricingService.fetchPricing(
+                    cardName: recognition.cardName,
+                    setName: recognition.setName,
+                    cardNumber: recognition.cardNumber
+                )
+
+                // Hide loading overlay
+                isRecognizing = false
+
+                // Step 3: Show confirmation view
+                pendingCardImage = image
+                pendingRecognition = recognition
+                pendingPricing = await pricing
+                showConfirmation = true
+
+                scanSession.isProcessing = false
             } catch {
-                print("Error saving card: \(error)")
+                // Handle recognition error
+                print("Recognition error: \(error.localizedDescription)")
+
+                // Show error feedback
+                let errorGenerator = UINotificationFeedbackGenerator()
+                errorGenerator.notificationOccurred(.error)
+
+                // Fall back to manual entry or show error
+                // For now, create a card with low confidence
+                let fallbackRecognition = RecognitionResult(
+                    cardName: "Unknown Card",
+                    setName: "Unknown Set",
+                    cardNumber: "???",
+                    confidence: 0.0,
+                    rarity: nil,
+                    cardType: nil,
+                    subtype: nil,
+                    supertype: nil
+                )
+
+                pendingCardImage = image
+                pendingRecognition = fallbackRecognition
+                pendingPricing = nil
+                showConfirmation = true
+
+                scanSession.isProcessing = false
+                isRecognizing = false
             }
 
-            scanSession.isProcessing = false
-
-            // Brief delay before ready for next capture
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                cameraManager.detectionState = .searching
-            }
+            // Reset detection state after brief delay
+            try? await Task.sleep(for: .milliseconds(500))
+            cameraManager.detectionState = .searching
         }
     }
 
+    private func saveConfirmedCard(recognition: RecognitionResult, pricing: CardPricing?, image: UIImage) {
+        // Create scanned card for session
+        let scannedCard = ScannedCard(
+            image: image,
+            cardName: recognition.cardName,
+            cardNumber: recognition.cardNumber,
+            setName: recognition.setName,
+            estimatedValue: pricing?.estimatedValue ?? 0.0,
+            confidence: recognition.confidence
+        )
+
+        // Add to scan session (temporary)
+        scanSession.addCard(scannedCard)
+
+        // Save to SwiftData for persistence
+        let inventoryCard = InventoryCard(from: scannedCard)
+        modelContext.insert(inventoryCard)
+
+        // Save context
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving card: \(error)")
+        }
+
+        // Success haptic
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
+
     private func finishSession() {
-        // Process all scanned cards
-        dismiss()
+        // Show success message if cards were scanned
+        if scanSession.cardCount > 0 {
+            showSessionSuccess = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func loadSelectedPhoto(_ item: PhotosPickerItem?) async {
+        guard let item = item else { return }
+
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                return
+            }
+
+            // Process the selected image through recognition
+            await processImageFromGallery(image)
+        } catch {
+            print("Error loading photo: \(error)")
+        }
+
+        // Reset selection
+        selectedPhotoItem = nil
+    }
+
+    private func processImageFromGallery(_ image: UIImage) async {
+        scanSession.isProcessing = true
+        isRecognizing = true
+        loadingStatus = "Recognizing card..."
+
+        do {
+            // Recognize card from gallery image
+            let recognition = try await recognitionService.recognizeCard(from: image)
+
+            loadingStatus = "Fetching prices..."
+
+            // Fetch pricing
+            async let pricing = try? await pricingService.fetchPricing(
+                cardName: recognition.cardName,
+                setName: recognition.setName,
+                cardNumber: recognition.cardNumber
+            )
+
+            // Hide loading
+            isRecognizing = false
+
+            // Show confirmation
+            pendingCardImage = image
+            pendingRecognition = recognition
+            pendingPricing = await pricing
+            showConfirmation = true
+
+            scanSession.isProcessing = false
+        } catch {
+            print("Recognition error from gallery: \(error.localizedDescription)")
+
+            // Fall back to manual entry
+            let fallbackRecognition = RecognitionResult(
+                cardName: "Unknown Card",
+                setName: "Unknown Set",
+                cardNumber: "???",
+                confidence: 0.0,
+                rarity: nil,
+                cardType: nil,
+                subtype: nil,
+                supertype: nil
+            )
+
+            pendingCardImage = image
+            pendingRecognition = fallbackRecognition
+            pendingPricing = nil
+            showConfirmation = true
+
+            scanSession.isProcessing = false
+            isRecognizing = false
+        }
     }
 }
 
@@ -471,6 +705,75 @@ struct CornerGuide: View {
     }
 }
 
+// MARK: - Background Dimming
+struct BackgroundDimming: View {
+    let detectionFrame: CGRect
+    let geometrySize: CGSize
+
+    var body: some View {
+        let rect = convertedRect
+
+        ZStack {
+            // Full screen dimming
+            Color.black.opacity(0.5)
+
+            // Cut out the detection area
+            RoundedRectangle(cornerRadius: 20)
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                .blendMode(.destinationOut)
+        }
+        .compositingGroup()
+        .animation(.easeInOut(duration: 0.3), value: detectionFrame)
+    }
+
+    private var convertedRect: CGRect {
+        // Convert Vision framework normalized coordinates to screen coordinates
+        let x = detectionFrame.origin.x * geometrySize.width
+        let y = (1 - detectionFrame.origin.y - detectionFrame.height) * geometrySize.height
+        let width = detectionFrame.width * geometrySize.width
+        let height = detectionFrame.height * geometrySize.height
+
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+}
+
+// MARK: - Scanner Loading Overlay
+struct ScannerLoadingOverlay: View {
+    let status: String
+
+    var body: some View {
+        ZStack {
+            // Semi-transparent background using design system
+            DesignSystem.ComponentStyles.LoadingStyle.overlayColor
+                .ignoresSafeArea()
+
+            // Loading card with design system styling
+            VStack(spacing: DesignSystem.Spacing.md) {
+                // Spinner with design system color
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .tint(DesignSystem.ComponentStyles.LoadingStyle.spinnerColor)
+
+                // Status text with design system typography
+                Text(status)
+                    .font(DesignSystem.Typography.heading4)
+                    .foregroundStyle(DesignSystem.ComponentStyles.LoadingStyle.textColor)
+
+                // Subtext with design system typography
+                Text("Please wait...")
+                    .font(DesignSystem.Typography.body)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+            }
+            .padding(DesignSystem.ComponentStyles.LoadingStyle.padding)
+            .background(DesignSystem.ComponentStyles.LoadingStyle.backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.ComponentStyles.LoadingStyle.cornerRadius))
+            .shadowElevation(5)
+        }
+        .transition(.opacity)
+    }
+}
+
 // MARK: - Scanned Card Thumbnail
 struct ScannedCardThumbnail: View {
     let card: ScannedCard
@@ -503,9 +806,9 @@ struct ScannedCardThumbnail: View {
             // Card info
             VStack(spacing: 2) {
                 Text("$\(String(format: "%.0f", card.estimatedValue))")
-                    .font(.caption)
+                    .font(DesignSystem.Typography.caption)
                     .fontWeight(.bold)
-                    .foregroundStyle(.cyan)
+                    .foregroundStyle(DesignSystem.Colors.cyan)
 
                 Text(card.cardName)
                     .font(.caption2)

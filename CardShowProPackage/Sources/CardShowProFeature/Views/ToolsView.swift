@@ -120,6 +120,7 @@ struct ToolRow: View {
     let title: String
     let description: String
     let color: Color
+    var isComingSoon: Bool = true // Default to coming soon until implemented
 
     var body: some View {
         Button {
@@ -133,19 +134,34 @@ struct ToolRow: View {
                     .frame(width: 52, height: 52)
                     .background(color.gradient)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .opacity(isComingSoon ? 0.5 : 1.0)
 
                 // Content
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
+                    HStack(spacing: 8) {
+                        Text(title)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+
+                        if isComingSoon {
+                            Text("SOON")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange)
+                                .clipShape(Capsule())
+                        }
+                    }
 
                     Text(description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
+                .opacity(isComingSoon ? 0.6 : 1.0)
 
                 Spacer()
 
@@ -154,11 +170,13 @@ struct ToolRow: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.tertiary)
+                    .opacity(isComingSoon ? 0.3 : 1.0)
             }
             .padding(16)
             .background(Color(.systemBackground))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(isComingSoon)
     }
 }

@@ -6,6 +6,7 @@ struct DashboardView: View {
     @Query private var inventoryCards: [InventoryCard]
     @State private var showCamera = false
     @State private var showSettings = false
+    @State private var showAddItem = false
     @State private var selectedPeriod = "1M"
     @State private var selectedTab = "Overview"
 
@@ -67,6 +68,14 @@ struct DashboardView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView(isShowModeActive: $appState.isShowModeActive)
             }
+            .sheet(isPresented: $showCamera) {
+                CameraView()
+            }
+            .sheet(isPresented: $showAddItem) {
+                NavigationStack {
+                    AddEditItemView(cardToEdit: nil)
+                }
+            }
         }
     }
 
@@ -79,35 +88,35 @@ struct DashboardView: View {
 
             HStack(spacing: 12) {
                 QuickActionButton(
-                    title: "Trade\nAnalyzer",
-                    icon: "arrow.triangle.2.circlepath",
-                    color: .blue
-                ) {
-                    // Action
-                }
-
-                QuickActionButton(
-                    title: "Pro Market\nAgent",
-                    icon: "chart.line.uptrend.xyaxis.circle.fill",
+                    title: "Quick\nScan",
+                    icon: "camera.fill",
                     color: .cyan
                 ) {
-                    // Action
+                    showCamera = true
                 }
 
                 QuickActionButton(
-                    title: "Sales\nCalculator",
-                    icon: "dollarsign.circle.fill",
+                    title: "View\nInventory",
+                    icon: "square.stack.3d.up.fill",
+                    color: .blue
+                ) {
+                    // Navigate to inventory tab (handled by tab bar)
+                }
+
+                QuickActionButton(
+                    title: "Add\nManual",
+                    icon: "plus.square.fill",
                     color: .green
                 ) {
-                    // Action
+                    showAddItem = true
                 }
 
                 QuickActionButton(
-                    title: "Add",
-                    icon: "plus",
-                    color: Color(.systemGray4)
+                    title: "Total\nValue",
+                    icon: "dollarsign.circle.fill",
+                    color: .orange
                 ) {
-                    // Action
+                    // Show total value - already visible on dashboard
                 }
             }
         }

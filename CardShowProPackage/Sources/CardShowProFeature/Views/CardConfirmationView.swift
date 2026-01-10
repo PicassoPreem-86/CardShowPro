@@ -1,0 +1,320 @@
+import SwiftUI
+
+/// View for confirming and editing scanned card details before saving
+struct CardConfirmationView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let cardImage: UIImage
+    let recognitionResult: RecognitionResult
+    let pricing: CardPricing?
+
+    var onConfirm: (RecognitionResult, CardPricing?) -> Void
+    var onRescan: () -> Void
+
+    @State private var cardName: String
+    @State private var setName: String
+    @State private var cardNumber: String
+    @State private var estimatedValue: Double
+
+    init(
+        cardImage: UIImage,
+        recognitionResult: RecognitionResult,
+        pricing: CardPricing?,
+        onConfirm: @escaping (RecognitionResult, CardPricing?) -> Void,
+        onRescan: @escaping () -> Void
+    ) {
+        self.cardImage = cardImage
+        self.recognitionResult = recognitionResult
+        self.pricing = pricing
+        self.onConfirm = onConfirm
+        self.onRescan = onRescan
+
+        // Initialize state
+        _cardName = State(initialValue: recognitionResult.cardName)
+        _setName = State(initialValue: recognitionResult.setName)
+        _cardNumber = State(initialValue: recognitionResult.cardNumber)
+        _estimatedValue = State(initialValue: pricing?.estimatedValue ?? 0)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Card Image
+                    cardImageSection
+
+                    // Confidence Badge
+                    confidenceBadge
+
+                    // Card Details
+                    cardDetailsSection
+
+                    // Pricing Section
+                    pricingSection
+
+                    // Action Buttons
+                    actionButtons
+                }
+                .padding()
+            }
+            .navigationTitle("Confirm Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Card Image Section
+
+    private var cardImageSection: some View {
+        Image(uiImage: cardImage)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: 300)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+    }
+
+    // MARK: - Confidence Badge
+
+    private var confidenceBadge: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(confidenceColor)
+
+            Text("Confidence: \(Int(recognitionResult.confidence * 100))%")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Text("(\(recognitionResult.confidenceLevel.rawValue))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(confidenceColor.opacity(0.15))
+        .clipShape(Capsule())
+    }
+
+    private var confidenceColor: Color {
+        switch recognitionResult.confidenceLevel {
+        case .veryHigh: return .green
+        case .high: return .blue
+        case .medium: return .orange
+        case .low: return .red
+        }
+    }
+
+    // MARK: - Card Details Section
+
+    private var cardDetailsSection: some View {
+        VStack(spacing: 16) {
+            Text("Card Details")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 12) {
+                ConfirmationDetailRow(label: "Card Name", icon: "star.fill") {
+                    TextField("Card Name", text: $cardName)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                ConfirmationDetailRow(label: "Set Name", icon: "square.stack.3d.up.fill") {
+                    TextField("Set Name", text: $setName)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                ConfirmationDetailRow(label: "Card Number", icon: "number") {
+                    TextField("Card Number", text: $cardNumber)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                if let rarity = recognitionResult.rarity {
+                    ConfirmationDetailRow(label: "Rarity", icon: "sparkles") {
+                        Text(rarity)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Pricing Section
+
+    private var pricingSection: some View {
+        VStack(spacing: 16) {
+            Text("Pricing")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 12) {
+                if let pricing = pricing {
+                    ConfirmationDetailRow(label: "Market Price", icon: "dollarsign.circle.fill") {
+                        if let market = pricing.marketPrice {
+                            Text("$\(String(format: "%.2f", market))")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.green)
+                        } else {
+                            Text("N/A")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let low = pricing.lowPrice, let high = pricing.highPrice {
+                        ConfirmationDetailRow(label: "Price Range", icon: "chart.line.uptrend.xyaxis") {
+                            Text("$\(String(format: "%.2f", low)) - $\(String(format: "%.2f", high))")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    ConfirmationDetailRow(label: "Source", icon: "globe") {
+                        Text(pricing.source.rawValue)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    ConfirmationDetailRow(label: "Estimated Value", icon: "dollarsign.circle") {
+                        HStack {
+                            Text("$")
+                            TextField("0.00", value: $estimatedValue, format: .number)
+                                .keyboardType(.decimalPad)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Action Buttons
+
+    private var actionButtons: some View {
+        VStack(spacing: 12) {
+            // Confirm Button
+            Button {
+                confirmCard()
+            } label: {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Add to Collection")
+                }
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.green)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            // Rescan Button
+            Button {
+                onRescan()
+                dismiss()
+            } label: {
+                HStack {
+                    Image(systemName: "camera.fill")
+                    Text("Rescan Card")
+                }
+                .font(.headline)
+                .foregroundStyle(.blue)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    // MARK: - Actions
+
+    private func confirmCard() {
+        // Create updated recognition result with edited values
+        let updatedResult = RecognitionResult(
+            cardName: cardName,
+            setName: setName,
+            cardNumber: cardNumber,
+            confidence: recognitionResult.confidence,
+            rarity: recognitionResult.rarity,
+            cardType: recognitionResult.cardType,
+            subtype: recognitionResult.subtype,
+            supertype: recognitionResult.supertype
+        )
+
+        // Create updated pricing if manually edited
+        let updatedPricing = pricing ?? CardPricing(
+            marketPrice: estimatedValue,
+            lowPrice: nil,
+            midPrice: nil,
+            highPrice: nil,
+            directLowPrice: nil,
+            source: .unknown,
+            lastUpdated: Date()
+        )
+
+        onConfirm(updatedResult, updatedPricing)
+        dismiss()
+    }
+}
+
+// MARK: - Confirmation Detail Row Component
+
+private struct ConfirmationDetailRow<Content: View>: View {
+    let label: String
+    let icon: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+
+                Text(label)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+            }
+
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    CardConfirmationView(
+        cardImage: UIImage(systemName: "photo")!,
+        recognitionResult: RecognitionResult(
+            cardName: "Charizard VMAX",
+            setName: "Darkness Ablaze",
+            cardNumber: "020",
+            confidence: 0.94,
+            rarity: "Rare Holo VMAX",
+            cardType: "Pokemon",
+            subtype: nil,
+            supertype: "Pokemon"
+        ),
+        pricing: CardPricing(
+            marketPrice: 125.99,
+            lowPrice: 98.50,
+            midPrice: 115.00,
+            highPrice: 145.00,
+            directLowPrice: 105.00,
+            source: .tcgPlayer,
+            lastUpdated: Date()
+        ),
+        onConfirm: { _, _ in },
+        onRescan: { }
+    )
+}
