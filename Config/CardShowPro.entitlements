@@ -21,12 +21,12 @@
 	
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.mycompany.CardShowPro</string>
+		<string>group.com.cardshowpro.app</string>
 	</array>
-	
+
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)com.mycompany.CardShowPro</string>
+		<string>$(AppIdentifierPrefix)com.cardshowpro.app</string>
 	</array>
     
 	-->

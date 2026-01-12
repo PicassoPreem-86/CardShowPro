@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Analytics dashboard
 - Pro Market Agent (AI pricing)
 
-See [TODO.md](./TODO.md) for complete roadmap.
+See [ai/FEATURES.json](./ai/FEATURES.json) for complete feature roadmap.
 
 ## [0.1.0] - 2026-01-09
 
@@ -44,7 +44,7 @@ See [TODO.md](./TODO.md) for complete roadmap.
   - PROJECT_STATUS.md - Current state tracking
   - ARCHITECTURE.md - Architecture documentation
   - DEVELOPMENT.md - Development guide
-  - TODO.md - Development roadmap
+  - ai/FEATURES.json - Feature roadmap
   - CONTRIBUTING.md - Contribution guidelines
   - CHANGELOG.md - Version history
 
@@ -137,7 +137,7 @@ Migration guide will be added when 0.2.0 is released.
 - [Project Status](./PROJECT_STATUS.md) - Current state and known issues
 - [Architecture Docs](./ARCHITECTURE.md) - Technical architecture
 - [Development Guide](./DEVELOPMENT.md) - How to develop
-- [TODO List](./TODO.md) - Planned features and roadmap
+- [Feature Roadmap](./ai/FEATURES.json) - Planned features with acceptance criteria
 - [Contributing](./CONTRIBUTING.md) - How to contribute
 
 ---

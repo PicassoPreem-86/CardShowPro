@@ -482,7 +482,7 @@ Update documentation when:
 - **README.md**: Project overview, getting started
 - **PROJECT_STATUS.md**: Current state, completed features
 - **ARCHITECTURE.md**: Design patterns, architectural decisions
-- **TODO.md**: Mark tasks complete, add new tasks
+- **ai/FEATURES.json**: Feature roadmap with acceptance criteria (update "passes" field when complete)
 - **DEVELOPMENT.md**: Development workflows (if changed)
 - **CLAUDE.md**: Coding standards (rarely changed)
 

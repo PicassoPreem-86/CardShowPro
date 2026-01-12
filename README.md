@@ -23,7 +23,7 @@ CardShow Pro is a professional-grade iOS application designed for trading card d
 - Sales calculator
 - Analytics dashboard
 
-See [TODO.md](./TODO.md) for complete roadmap.
+See [ai/FEATURES.json](./ai/FEATURES.json) for complete feature roadmap.
 
 ## AI Assistant Rules Files
 
@@ -179,7 +179,7 @@ This project includes comprehensive documentation for developers and AI coding a
 ### For Developers
 - **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Complete development guide with workflows, patterns, and best practices
 - **[CONTRIBUTING.md](./CONTRIBUTING.md)** - How to contribute to this project
-- **[TODO.md](./TODO.md)** - Development roadmap with all planned features
+- **[ai/FEATURES.json](./ai/FEATURES.json)** - Development roadmap with all planned features
 - **[CHANGELOG.md](./CHANGELOG.md)** - Version history and release notes
 
 ### For Understanding the Project
@@ -238,7 +238,7 @@ CardShowPro/
     ├── PROJECT_STATUS.md            # Current state
     ├── ARCHITECTURE.md              # Architecture docs
     ├── DEVELOPMENT.md               # Development guide
-    ├── TODO.md                      # Roadmap
+    ├── ai/FEATURES.json             # Feature roadmap
     ├── CONTRIBUTING.md              # Contribution guide
     ├── CHANGELOG.md                 # Version history
     └── CLAUDE.md                    # AI coding standards
