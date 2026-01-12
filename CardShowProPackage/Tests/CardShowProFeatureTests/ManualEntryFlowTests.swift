@@ -158,23 +158,6 @@ import Foundation
     #expect(service != nil)
 }
 
-@Test @MainActor func pokemonTCGServiceGetPopularPokemonReturnsMinimumEight() async throws {
-    let service = PokemonTCGService.shared
-    let popularPokemon = service.getPopularPokemon()
-
-    #expect(popularPokemon.count >= 8)
-}
-
-@Test @MainActor func pokemonTCGServiceGetPopularPokemonReturnsValidNames() async throws {
-    let service = PokemonTCGService.shared
-    let popularPokemon = service.getPopularPokemon()
-
-    // Verify some expected Pokemon are in the list
-    #expect(popularPokemon.contains("Pikachu"))
-    #expect(popularPokemon.contains("Charizard"))
-    #expect(popularPokemon.contains("Mewtwo"))
-}
-
 @Test @MainActor func pokemonTCGServiceInitialStateIsNotLoading() async throws {
     let service = PokemonTCGService.shared
     #expect(service.isLoading == false)

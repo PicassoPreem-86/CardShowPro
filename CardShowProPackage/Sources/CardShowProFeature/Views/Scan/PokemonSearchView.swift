@@ -22,7 +22,6 @@ struct PokemonSearchView: View {
                     } else {
                         recentSearchesSection
                     }
-                    popularPokemonSection
                 } else if state.isLoading {
                     // Loading state
                     loadingStateSection
@@ -160,46 +159,6 @@ struct PokemonSearchView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Recent: \(pokemon)")
-    }
-
-    // MARK: - Popular Pokemon Section
-
-    private var popularPokemonSection: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
-            Text("Popular Pokemon")
-                .font(DesignSystem.Typography.heading4)
-                .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignSystem.Spacing.sm) {
-                ForEach(service.getPopularPokemon(), id: \.self) { pokemon in
-                    popularPokemonCard(pokemon)
-                }
-            }
-        }
-    }
-
-    private func popularPokemonCard(_ pokemon: String) -> some View {
-        Button {
-            HapticManager.shared.medium()
-            selectPokemon(pokemon)
-        } label: {
-            VStack(spacing: DesignSystem.Spacing.xs) {
-                Image(systemName: "star.fill")
-                    .font(DesignSystem.Typography.heading3)
-                    .foregroundStyle(DesignSystem.Colors.thunderYellow)
-
-                Text(pokemon)
-                    .font(DesignSystem.Typography.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(DesignSystem.Spacing.md)
-            .cardStyle()
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Popular: \(pokemon)")
     }
 
     // MARK: - Loading State Section

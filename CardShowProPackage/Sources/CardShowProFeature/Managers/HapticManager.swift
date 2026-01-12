@@ -1,4 +1,4 @@
-import UIKit
+import SwiftUI
 
 /// Centralized manager for all haptic feedback in the app
 ///

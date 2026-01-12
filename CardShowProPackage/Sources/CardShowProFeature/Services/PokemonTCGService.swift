@@ -187,32 +187,6 @@ final class PokemonTCGService: @unchecked Sendable {
         }
     }
 
-    /// Get hardcoded list of popular Pokemon
-    func getPopularPokemon() -> [String] {
-        return [
-            "Pikachu",
-            "Charizard",
-            "Mewtwo",
-            "Mew",
-            "Lugia",
-            "Rayquaza",
-            "Lucario",
-            "Greninja",
-            "Eevee",
-            "Snorlax",
-            "Gengar",
-            "Dragonite",
-            "Blastoise",
-            "Venusaur",
-            "Gyarados",
-            "Alakazam",
-            "Machamp",
-            "Umbreon",
-            "Espeon",
-            "Arceus"
-        ]
-    }
-
     // MARK: - Helper Methods
 
     /// Extract pricing from a card
