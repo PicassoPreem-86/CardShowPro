@@ -13,7 +13,7 @@ public struct ContentView: View {
                 .tag(AppState.Tab.dashboard)
 
             ManualEntryFlow()
-                .environment(appState.scanSession)
+                .environment(appState)
                 .tabItem {
                     Label("Scan", systemImage: "text.magnifyingglass")
                 }
