@@ -12,10 +12,10 @@ public struct ContentView: View {
                 }
                 .tag(AppState.Tab.dashboard)
 
-            CameraView()
+            ManualEntryFlow()
                 .environment(appState.scanSession)
                 .tabItem {
-                    Label("Scan", systemImage: "camera.fill")
+                    Label("Scan", systemImage: "text.magnifyingglass")
                 }
                 .tag(AppState.Tab.scan)
 

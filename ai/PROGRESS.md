@@ -1,5 +1,41 @@
 # Development Progress
 
+## 2026-01-12: Pivoted from Camera to Manual Entry (V1 MVP)
+
+**What Changed:**
+- Archived camera-based scanning code for V2
+- Implemented manual text entry flow (Search → Set Selection → Card Entry → Success)
+- Created 4 new view components using PokemonTCG.io free API
+- Zero API costs, 100% accuracy, works anywhere
+
+**Files Changed:**
+- Archived: CameraView, CameraManager, CardRecognitionService (moved to /Archived)
+- Created: PokemonSearchView, SetSelectionView, CardEntryView, AddCardSuccessView
+- Created: PokemonTCGService, CardVariant, ScanFlowState models
+- Updated: ContentView to use ManualEntryFlow
+
+**Testing Status:**
+- ✅ All views build successfully
+- ⏳ End-to-end flow testing pending
+- ⏳ SwiftData persistence testing pending
+
+**Architecture Decisions:**
+- PokemonTCG.io API requires no API key (free, unlimited)
+- Manual entry more reliable than camera scanning for V1
+- Cleaner UX: Search by name → Pick set → Enter card # → Confirm
+- Camera scanning reserved for V2 after MVP validation
+
+**Next Steps:**
+1. Test complete manual entry flow on simulator
+2. Verify card search functionality
+3. Verify set selection and card number entry
+4. Verify card data displayed correctly
+5. Verify success flow and return to dashboard
+6. If tests pass, mark F001 as complete
+7. Update documentation to reflect V1 MVP scope
+
+---
+
 ## Session: 2026-01-10 (Part 9 - Main Thread Blocking Fix - CRITICAL)
 
 ### What Was Done

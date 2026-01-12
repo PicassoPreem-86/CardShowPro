@@ -10,13 +10,14 @@ CardShow Pro is a professional-grade iOS application designed for trading card d
 
 ### Completed
 - Dashboard with inventory statistics and quick actions
-- Camera scanning interface with real-time card detection
 - Tab-based navigation (Dashboard, Inventory, Scan, Tools)
 - Dark mode optimized UI
 - Modern SwiftUI architecture
+- Manual card entry flow (Search → Set Selection → Card Entry → Success)
+- PokemonTCG.io API integration (free, no API key required)
 
 ### In Development
-- Card recognition API integration
+- End-to-end manual entry testing
 - Data persistence with SwiftData
 - Inventory management system
 - Trade analyzer

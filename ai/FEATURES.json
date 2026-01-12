@@ -3,14 +3,15 @@
     {
       "id": "F001",
       "name": "Card Recognition API Integration",
-      "description": "Replace mock card data with real card recognition API to scan and identify trading cards",
+      "description": "Manual text entry for Pokemon cards using PokemonTCG.io free API",
       "acceptance": [
-        "Camera captures card image and sends to recognition API",
-        "API returns card name, set, condition, and estimated value",
-        "App displays recognized card details in scanned cards carousel",
-        "Error states show when API fails or card not recognized",
-        "Loading indicator displays while API processes image",
-        "API keys stored securely in Keychain"
+        "User can search for Pokemon card by name",
+        "User can select card set from search results",
+        "User can specify card number within selected set",
+        "App displays card image and details from PokemonTCG.io API",
+        "Card is saved to inventory after confirmation",
+        "Loading indicator displays while API fetches data",
+        "Error states show when API fails or card not found"
       ],
       "passes": false
     },
