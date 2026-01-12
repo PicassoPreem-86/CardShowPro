@@ -9,7 +9,7 @@ public final class InventoryCard {
     public var cardName: String
     public var cardNumber: String
     public var setName: String
-    public var gameType: String // Store as String for SwiftData compatibility
+    public var gameType: String = CardGame.pokemon.rawValue // Default for existing records
     public var estimatedValue: Double
     public var confidence: Double
     public var timestamp: Date

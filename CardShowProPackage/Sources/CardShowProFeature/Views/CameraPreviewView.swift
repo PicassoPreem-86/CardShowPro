@@ -2,16 +2,28 @@ import SwiftUI
 import AVFoundation
 
 /// UIViewRepresentable wrapper for AVCaptureVideoPreviewLayer
-struct CameraPreviewView: UIViewRepresentable {
+struct CameraPreviewView: View {
     let previewLayer: AVCaptureVideoPreviewLayer
+
+    var body: some View {
+        GeometryReader { geometry in
+            CameraPreviewLayerView(previewLayer: previewLayer, size: geometry.size)
+        }
+    }
+}
+
+/// Internal UIViewRepresentable that receives explicit size
+private struct CameraPreviewLayerView: UIViewRepresentable {
+    let previewLayer: AVCaptureVideoPreviewLayer
+    let size: CGSize
 
     func makeUIView(context: Context) -> UIView {
         print("🎬 DEBUG [CameraPreviewView]: makeUIView() called")
-        let view = UIView(frame: .zero)
+        let view = UIView(frame: CGRect(origin: .zero, size: size))
         view.backgroundColor = .black
-        print("🎬 DEBUG [CameraPreviewView]: UIView created with frame: \(view.frame)")
+        print("🎬 DEBUG [CameraPreviewView]: UIView created with size: \(size)")
 
-        // Set initial frame IMMEDIATELY before adding sublayer
+        // Set frame immediately with the size from GeometryReader
         previewLayer.frame = view.bounds
         print("🎬 DEBUG [CameraPreviewView]: Preview layer frame set to: \(previewLayer.frame)")
 
@@ -33,12 +45,14 @@ struct CameraPreviewView: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         print("🎬 DEBUG [CameraPreviewView]: updateUIView() called")
+        print("🎬 DEBUG [CameraPreviewView]: New size from GeometryReader: \(size)")
         print("🎬 DEBUG [CameraPreviewView]: UIView bounds: \(uiView.bounds)")
         print("🎬 DEBUG [CameraPreviewView]: Current preview layer frame: \(previewLayer.frame)")
 
-        // Update frame SYNCHRONOUSLY - no async dispatch
-        // We're already on MainActor, no need for async
-        previewLayer.frame = uiView.bounds
+        // Update frame to match new size
+        let newBounds = CGRect(origin: .zero, size: size)
+        uiView.frame = newBounds
+        previewLayer.frame = newBounds
         print("🎬 DEBUG [CameraPreviewView]: Preview layer frame updated to: \(previewLayer.frame)")
 
         // Check session status

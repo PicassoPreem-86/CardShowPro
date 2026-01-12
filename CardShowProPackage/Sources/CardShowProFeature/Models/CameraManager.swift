@@ -1,11 +1,15 @@
 @preconcurrency import AVFoundation
 import SwiftUI
+import OSLog
 
 /// Simplified camera manager for manual photo capture only.
 /// No auto-detection, no frame processing - just camera preview and high-quality photo capture.
 @MainActor
 @Observable
 final class CameraManager: NSObject, @unchecked Sendable {
+    // MARK: - Logging
+    private let logger = Logger(subsystem: "com.cardshowpro.camera", category: "CameraManager")
+
     // MARK: - Camera Properties
     private nonisolated(unsafe) let captureSession = AVCaptureSession()
     private nonisolated(unsafe) var photoOutput = AVCapturePhotoOutput()
@@ -61,42 +65,48 @@ final class CameraManager: NSObject, @unchecked Sendable {
 
     // MARK: - Setup
     func setupCaptureSession() async {
-        print("🎥 DEBUG: Starting setupCaptureSession")
-        print("🎥 DEBUG: Authorization status: \(authorizationStatus)")
+        logger.debug("Starting setupCaptureSession")
+        logger.debug("Authorization status: \(String(describing: self.authorizationStatus))")
 
         guard authorizationStatus == .authorized else {
-            print("❌ DEBUG: Authorization not granted - status: \(authorizationStatus)")
+            logger.error("Authorization not granted - status: \(String(describing: self.authorizationStatus))")
             await MainActor.run {
                 sessionState = .failed(NSError(domain: "CameraManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Camera not authorized"]))
             }
             return
         }
 
-        print("✅ DEBUG: Authorization granted, proceeding with setup")
+        logger.info("Authorization granted, proceeding with setup")
         await MainActor.run {
             sessionState = .configuring
         }
-        print("🎥 DEBUG: Session state set to .configuring")
+        logger.debug("Session state set to .configuring")
 
         // Run configuration on session queue
-        print("🎥 DEBUG: Entering session queue for configuration")
+        logger.debug("Entering session queue for configuration")
         await withCheckedContinuation { continuation in
             sessionQueue.async { [weak self] in
-                print("🎥 DEBUG: Inside sessionQueue.async")
                 guard let self = self else {
-                    print("❌ DEBUG: self is nil in sessionQueue")
                     continuation.resume()
                     return
                 }
 
-                print("🎥 DEBUG: Beginning session configuration")
+                Task { @MainActor in
+                    self.logger.debug("Inside sessionQueue.async")
+                    self.logger.debug("Beginning session configuration")
+                }
+
                 self.captureSession.beginConfiguration()
                 self.captureSession.sessionPreset = .photo
 
                 // Add video input
-                print("🎥 DEBUG: Looking for back camera device...")
+                Task { @MainActor in
+                    self.logger.debug("Looking for back camera device...")
+                }
                 guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-                    print("❌ DEBUG: Back camera NOT found!")
+                    Task { @MainActor in
+                        self.logger.error("Back camera NOT found!")
+                    }
                     self.captureSession.commitConfiguration()
                     Task { @MainActor in
                         self.sessionState = .failed(NSError(domain: "CameraManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "Camera not available"]))
@@ -104,25 +114,37 @@ final class CameraManager: NSObject, @unchecked Sendable {
                     continuation.resume()
                     return
                 }
-                print("✅ DEBUG: Back camera found: \(camera.localizedName)")
+                Task { @MainActor in
+                    self.logger.info("Back camera found: \(camera.localizedName)")
+                }
 
                 do {
-                    print("🎥 DEBUG: Creating AVCaptureDeviceInput...")
+                    Task { @MainActor in
+                        self.logger.debug("Creating AVCaptureDeviceInput...")
+                    }
                     let input = try AVCaptureDeviceInput(device: camera)
-                    print("✅ DEBUG: AVCaptureDeviceInput created")
+                    Task { @MainActor in
+                        self.logger.info("AVCaptureDeviceInput created")
+                    }
 
                     if self.captureSession.canAddInput(input) {
-                        print("🎥 DEBUG: Adding video input to session...")
-                        self.captureSession.addInput(input)
-                        print("✅ DEBUG: Video input added successfully")
                         Task { @MainActor in
+                            self.logger.debug("Adding video input to session...")
+                        }
+                        self.captureSession.addInput(input)
+                        Task { @MainActor in
+                            self.logger.info("Video input added successfully")
                             self.currentCamera = camera
                         }
                     } else {
-                        print("❌ DEBUG: canAddInput returned false - session cannot accept input")
+                        Task { @MainActor in
+                            self.logger.error("canAddInput returned false - session cannot accept input")
+                        }
                     }
                 } catch {
-                    print("❌ DEBUG: Error creating camera input: \(error.localizedDescription)")
+                    Task { @MainActor in
+                        self.logger.error("Error creating camera input: \(error.localizedDescription)")
+                    }
                     self.captureSession.commitConfiguration()
                     Task { @MainActor in
                         self.sessionState = .failed(error)
@@ -132,71 +154,89 @@ final class CameraManager: NSObject, @unchecked Sendable {
                 }
 
                 // Add photo output for high-quality capture
-                print("🎥 DEBUG: Adding photo output...")
+                Task { @MainActor in
+                    self.logger.debug("Adding photo output...")
+                }
                 if self.captureSession.canAddOutput(self.photoOutput) {
                     self.captureSession.addOutput(self.photoOutput)
-                    print("✅ DEBUG: Photo output added successfully")
+                    Task { @MainActor in
+                        self.logger.info("Photo output added successfully")
+                    }
 
                     // Configure photo output for highest quality
                     self.photoOutput.isHighResolutionCaptureEnabled = true
                     if #available(iOS 17.0, *) {
                         self.photoOutput.maxPhotoDimensions = camera.activeFormat.supportedMaxPhotoDimensions.first ?? CMVideoDimensions(width: 0, height: 0)
                     }
-                    print("🎥 DEBUG: Photo output configured for high resolution")
+                    Task { @MainActor in
+                        self.logger.debug("Photo output configured for high resolution")
+                    }
                 } else {
-                    print("❌ DEBUG: canAddOutput returned false - cannot add photo output")
+                    Task { @MainActor in
+                        self.logger.error("canAddOutput returned false - cannot add photo output")
+                    }
                 }
 
-                print("🎥 DEBUG: Committing session configuration...")
+                Task { @MainActor in
+                    self.logger.debug("Committing session configuration...")
+                }
                 self.captureSession.commitConfiguration()
-                print("✅ DEBUG: Session configuration committed")
+                Task { @MainActor in
+                    self.logger.info("Session configuration committed")
+                }
 
                 // Configuration complete
                 Task { @MainActor in
                     self.sessionState = .configured
-                    print("🎥 DEBUG: Session state set to .configured")
+                    self.logger.debug("Session state set to .configured")
                 }
 
                 continuation.resume()
-                print("🎥 DEBUG: Continuation resumed - exiting sessionQueue")
+                Task { @MainActor in
+                    self.logger.debug("Continuation resumed - exiting sessionQueue")
+                }
             }
         }
 
         // Create preview layer on main thread
-        print("🎥 DEBUG: Creating AVCaptureVideoPreviewLayer...")
+        logger.debug("Creating AVCaptureVideoPreviewLayer...")
         let preview = AVCaptureVideoPreviewLayer(session: captureSession)
         preview.videoGravity = .resizeAspectFill
-        print("🎥 DEBUG: Preview layer created with videoGravity: \(preview.videoGravity)")
-        print("🎥 DEBUG: Assigning preview layer to self.previewLayer...")
+        logger.debug("Preview layer created with videoGravity: \(String(describing: preview.videoGravity))")
+        logger.debug("Assigning preview layer to self.previewLayer...")
         previewLayer = preview
-        print("✅ DEBUG: Preview layer assigned! previewLayer = \(String(describing: previewLayer))")
-        print("🎥 DEBUG: setupCaptureSession() complete")
+        logger.info("Preview layer assigned! previewLayer = \(String(describing: self.previewLayer))")
+        logger.debug("setupCaptureSession() complete")
     }
 
     // MARK: - Session Control
     nonisolated func startSession() {
         Task { @MainActor in
-            print("🎥 DEBUG: startSession() called")
+            self.logger.debug("startSession() called")
             guard !self.isSessionRunning else {
-                print("⚠️ DEBUG: Session already running, skipping")
+                self.logger.warning("Session already running, skipping")
                 return
             }
 
-            print("🎥 DEBUG: Dispatching captureSession.startRunning() to sessionQueue...")
-            self.sessionQueue.async { [captureSession] in
-                print("🎥 DEBUG: Inside sessionQueue - calling startRunning()...")
+            self.logger.debug("Dispatching captureSession.startRunning() to sessionQueue...")
+            self.sessionQueue.async { [captureSession, logger] in
+                Task { @MainActor in
+                    logger.debug("Inside sessionQueue - calling startRunning()...")
+                }
                 captureSession.startRunning()
-                print("🎥 DEBUG: startRunning() called")
-                print("🎥 DEBUG: Session isRunning: \(captureSession.isRunning)")
+                Task { @MainActor in
+                    logger.debug("startRunning() called")
+                    logger.debug("Session isRunning: \(captureSession.isRunning)")
+                }
 
                 Task { @MainActor [weak self] in
                     guard let self = self else {
-                        print("❌ DEBUG: self is nil when setting isSessionRunning")
+                        logger.error("self is nil when setting isSessionRunning")
                         return
                     }
                     self.isSessionRunning = true
                     self.sessionState = .running
-                    print("✅ DEBUG: Session state set to .running, isSessionRunning = true")
+                    self.logger.info("Session state set to .running, isSessionRunning = true")
                 }
             }
         }
@@ -226,7 +266,16 @@ final class CameraManager: NSObject, @unchecked Sendable {
 
             // Use highest quality format available
             if photoOutput.availablePhotoCodecTypes.contains(.hevc) {
-                settings.photoQualityPrioritization = .quality
+                // Respect device's max quality prioritization to avoid crash
+                // QualityPrioritization raw values: balanced=0, speed=1, quality=2
+                let desiredQuality: AVCapturePhotoOutput.QualityPrioritization = .quality
+                let maxSupported = photoOutput.maxPhotoQualityPrioritization
+
+                if desiredQuality.rawValue <= maxSupported.rawValue {
+                    settings.photoQualityPrioritization = desiredQuality
+                } else {
+                    settings.photoQualityPrioritization = maxSupported
+                }
             }
 
             // Configure flash based on isFlashOn state
@@ -276,7 +325,9 @@ final class CameraManager: NSObject, @unchecked Sendable {
 
                     camera.unlockForConfiguration()
                 } catch {
-                    print("Error toggling flash: \(error)")
+                    Task { @MainActor [weak self] in
+                        self?.logger.error("Error toggling flash: \(error)")
+                    }
                 }
             }
         }
@@ -296,7 +347,9 @@ final class CameraManager: NSObject, @unchecked Sendable {
                     }
                     camera.unlockForConfiguration()
                 } catch {
-                    print("Error setting flash: \(error)")
+                    Task { @MainActor [weak self] in
+                        self?.logger.error("Error setting flash: \(error)")
+                    }
                 }
             }
         }

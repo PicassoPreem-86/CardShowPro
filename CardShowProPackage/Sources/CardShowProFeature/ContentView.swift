@@ -34,6 +34,15 @@ public struct ContentView: View {
                 .tag(AppState.Tab.tools)
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            // Configure tab bar appearance for better visibility
+            let appearance = UITabBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor.black
+
+            UITabBar.appearance().standardAppearance = appearance
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
     }
 
     public init() {}

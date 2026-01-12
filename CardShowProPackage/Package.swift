@@ -19,7 +19,7 @@ let package = Package(
         .target(
             name: "CardShowProFeature",
             swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency", .when(configuration: .release))
+                .enableUpcomingFeature("StrictConcurrency")
             ]
         ),
         .testTarget(

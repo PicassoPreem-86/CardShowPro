@@ -25,7 +25,8 @@
         "Dashboard stats accurately reflect persisted card data",
         "App launches and loads existing data without crashes"
       ],
-      "passes": false
+      "passes": true,
+      "completedDate": "2026-01-10"
     },
     {
       "id": "F003",
@@ -68,7 +69,8 @@
         "Trade can be saved to history",
         "User can scan cards directly into trade sides"
       ],
-      "passes": false
+      "passes": true,
+      "completedDate": "2026-01-10"
     },
     {
       "id": "F006",

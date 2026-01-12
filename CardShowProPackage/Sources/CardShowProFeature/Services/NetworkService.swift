@@ -207,6 +207,12 @@ final class NetworkService: Sendable {
                 do {
                     return try decoder.decode(T.self, from: data)
                 } catch {
+                    // Log raw response for debugging
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        print("❌ DEBUG [Network]: Failed to decode response")
+                        print("❌ DEBUG [Network]: Raw response (first 1000 chars): \(String(responseString.prefix(1000)))")
+                    }
+                    print("❌ DEBUG [Network]: Decoding error: \(error)")
                     throw NetworkError.decodingError(error)
                 }
             } catch {

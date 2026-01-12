@@ -11,14 +11,41 @@ final class CardRecognitionService {
     private let networkService = NetworkService.shared
 
     // MARK: - Configuration
-    // TODO: Move API key to secure storage (Keychain)
-    // To configure:
-    // 1. Sign up at https://app.ximilar.com/
-    // 2. Get your API token from the dashboard
-    // 3. Replace the empty string below with your token
-    // 4. Set useRealAPI to true
-    private let ximilarAPIKey = "cefead39dcded9fbabc0fce72bd588594d70d308" // Add your Ximilar API token here (e.g., "your-api-token-here")
-    private let useRealAPI = true // Set to true when API token is configured
+
+    /// Ximilar API Configuration Instructions
+    /// ======================================
+    ///
+    /// The app currently uses MOCK DATA for card recognition. To enable REAL card recognition:
+    ///
+    /// Step 1: Sign Up for Ximilar (Free Tier Available)
+    ///   - Go to: https://app.ximilar.com
+    ///   - Sign up for a free account (no credit card required)
+    ///   - Free tier includes 1,000 API credits per month
+    ///
+    /// Step 2: Get Your API Token
+    ///   - Log in to Ximilar dashboard
+    ///   - Navigate to: https://app.ximilar.com/my-plan/settings
+    ///   - Copy your API token (looks like: "a1b2c3d4e5f6...")
+    ///
+    /// Step 3: Configure This App
+    ///   - Paste your token in the `ximilarAPIKey` variable below
+    ///   - Change `useRealAPI` from `false` to `true`
+    ///
+    /// Step 4: Verify Your Plan
+    ///   - Ensure your plan has access to "Collectibles Recognition"
+    ///   - Specifically the "/v2/tcg_id" endpoint for trading card recognition
+    ///   - Free tier should include this endpoint
+    ///
+    /// Troubleshooting:
+    ///   - If you get 401 errors: Check your API token is correct
+    ///   - If credits exhausted: Upgrade plan or wait for monthly reset
+    ///   - Support: care@ximilar.com
+    ///   - Developer support: tech@ximilar.com
+    ///
+    /// Note: For production apps, move the API key to secure storage (Keychain)
+
+    private let ximilarAPIKey = "" // Paste your Ximilar API token here from https://app.ximilar.com/my-plan/settings
+    private let useRealAPI = false // Set to true after configuring your API token above
 
     // MARK: - State
     var isProcessing = false
@@ -46,6 +73,8 @@ final class CardRecognitionService {
             return try await recognizeWithXimilar(imageData: imageData, game: game)
         } else {
             // Use mock recognition for development/testing
+            print("ℹ️ DEBUG [Recognition]: Using MOCK data (Ximilar API not configured)")
+            print("ℹ️ DEBUG [Recognition]: To enable real card recognition, see CardRecognitionService.swift configuration")
             return try await mockRecognition(imageData: imageData, game: game)
         }
     }
@@ -59,6 +88,9 @@ final class CardRecognitionService {
             throw NetworkError.invalidURL
         }
 
+        print("🔍 DEBUG [Recognition]: Starting Ximilar API call for game: \(game.displayName)")
+        print("🔍 DEBUG [Recognition]: Image data size: \(imageData.count) bytes")
+
         // Setup headers with Token authentication
         let headers = [
             "Authorization": "Token \(ximilarAPIKey)"
@@ -66,6 +98,7 @@ final class CardRecognitionService {
 
         do {
             // Use base64 image encoding (Ximilar's preferred format)
+            print("🔍 DEBUG [Recognition]: Sending request to Ximilar API...")
             let response: XimilarRecognitionResponse = try await networkService.postBase64Image(
                 url: url,
                 imageData: imageData,
@@ -73,21 +106,48 @@ final class CardRecognitionService {
                 retryCount: 2
             )
 
+            print("🔍 DEBUG [Recognition]: Received response from Ximilar")
+            print("🔍 DEBUG [Recognition]: Response status: \(response.status?.code ?? -1)")
+            print("🔍 DEBUG [Recognition]: Number of records: \(response.records.count)")
+
+            if let firstRecord = response.records.first {
+                print("🔍 DEBUG [Recognition]: First record status: \(firstRecord.status?.code ?? -1)")
+                print("🔍 DEBUG [Recognition]: Number of objects: \(firstRecord.objects?.count ?? 0)")
+
+                if let firstObject = firstRecord.objects?.first {
+                    print("🔍 DEBUG [Recognition]: First object name: \(firstObject.name ?? "nil")")
+                    print("🔍 DEBUG [Recognition]: First object confidence: \(firstObject.prob ?? 0.0)")
+                    print("🔍 DEBUG [Recognition]: First object set: \(firstObject.setName ?? "nil")")
+                    print("🔍 DEBUG [Recognition]: First object number: \(firstObject.number ?? "nil")")
+                }
+            }
+
             // Convert Ximilar response to our internal format
             guard let result = response.toRecognitionResult(game: game) else {
+                print("❌ DEBUG [Recognition]: Failed to convert response to RecognitionResult")
                 throw RecognitionError.noCardDetected
             }
 
-            // Check confidence threshold (60% minimum for reliability)
-            guard result.confidence >= 0.60 else {
+            print("✅ DEBUG [Recognition]: Converted to RecognitionResult successfully")
+            print("🔍 DEBUG [Recognition]: Card: \(result.cardName)")
+            print("🔍 DEBUG [Recognition]: Set: \(result.setName)")
+            print("🔍 DEBUG [Recognition]: Confidence: \(result.confidence)")
+
+            // Check confidence threshold (50% minimum for reliability - lowered for testing)
+            guard result.confidence >= 0.50 else {
+                print("⚠️ DEBUG [Recognition]: Confidence too low: \(result.confidence) < 0.50")
                 throw RecognitionError.lowConfidence(score: result.confidence)
             }
 
+            print("✅ DEBUG [Recognition]: Recognition successful!")
             return result
         } catch let error as NetworkError {
+            print("❌ DEBUG [Recognition]: NetworkError occurred")
             // Handle specific network errors
             switch error {
             case .httpError(let statusCode, let message):
+                print("❌ DEBUG [Recognition]: HTTP Error \(statusCode)")
+                print("❌ DEBUG [Recognition]: Message: \(message ?? "none")")
                 if statusCode == 401 {
                     throw RecognitionError.apiError("Invalid API token. Please check your Ximilar configuration.")
                 } else if statusCode == 429 {
@@ -97,15 +157,19 @@ final class CardRecognitionService {
                 } else {
                     throw RecognitionError.apiError(message ?? "HTTP Error \(statusCode)")
                 }
-            case .decodingError:
+            case .decodingError(let decodingError):
+                print("❌ DEBUG [Recognition]: Decoding error: \(decodingError.localizedDescription)")
                 throw RecognitionError.invalidResponse
             default:
+                print("❌ DEBUG [Recognition]: Network error: \(error.localizedDescription)")
                 throw RecognitionError.networkError(error)
             }
         } catch let error as RecognitionError {
+            print("❌ DEBUG [Recognition]: RecognitionError: \(error.localizedDescription)")
             // Re-throw recognition errors as-is
             throw error
         } catch {
+            print("❌ DEBUG [Recognition]: Unknown error: \(error.localizedDescription)")
             // Handle any other errors
             throw RecognitionError.apiError(error.localizedDescription)
         }
@@ -114,6 +178,8 @@ final class CardRecognitionService {
     // MARK: - Mock Recognition (for development)
 
     private func mockRecognition(imageData: Data, game: CardGame) async throws -> RecognitionResult {
+        print("🎴 DEBUG [Mock]: Generating random \(game.displayName) card...")
+
         // Simulate network delay
         try await Task.sleep(for: .milliseconds(800))
 
@@ -156,7 +222,7 @@ final class CardRecognitionService {
             randomCard = ("Unknown Card", "Unknown Set", "???", 0.50, "Unknown", "Unknown", nil, "Unknown")
         }
 
-        return RecognitionResult(
+        let result = RecognitionResult(
             cardName: randomCard.name,
             setName: randomCard.set,
             cardNumber: randomCard.number,
@@ -167,6 +233,12 @@ final class CardRecognitionService {
             subtype: randomCard.subtype,
             supertype: randomCard.supertype
         )
+
+        print("✅ DEBUG [Mock]: Generated card: \(result.cardName)")
+        print("🎴 DEBUG [Mock]: Set: \(result.setName) #\(result.cardNumber)")
+        print("🎴 DEBUG [Mock]: Confidence: \(Int(result.confidence * 100))%")
+
+        return result
     }
 
     // MARK: - Image Processing

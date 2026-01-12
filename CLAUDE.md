@@ -1,6 +1,6 @@
 # Project Overview
 
-This is a native **iOS application** built with **Swift 6.1+** and **SwiftUI**. The codebase targets **iOS 18.0 and later**, allowing full use of modern Swift and iOS APIs. All concurrency is handled with **Swift Concurrency** (async/await, actors, @MainActor isolation) ensuring thread-safe code.
+This is a native **iOS application** built with **Swift 6.1+** and **SwiftUI**. The codebase targets **iOS 17.0 and later**, allowing full use of modern Swift and iOS APIs. All concurrency is handled with **Swift Concurrency** (async/await, actors, @MainActor isolation) ensuring thread-safe code.
 
 - **Frameworks & Tech:** SwiftUI for UI, Swift Concurrency with strict mode, Swift Package Manager for modular architecture
 - **Architecture:** Model-View (MV) pattern using pure SwiftUI state management. We avoid MVVM and instead leverage SwiftUI's built-in state mechanisms (@State, @Observable, @Environment, @Binding)
@@ -13,28 +13,28 @@ This is a native **iOS application** built with **Swift 6.1+** and **SwiftUI**. 
 The project follows a **workspace + SPM package** architecture:
 
 ```
-YourApp/
+CardShowPro/
 ├── Config/                         # XCConfig build settings
 │   ├── Debug.xcconfig
 │   ├── Release.xcconfig
 │   ├── Shared.xcconfig
 │   └── Tests.xcconfig
-├── YourApp.xcworkspace/            # Workspace container
-├── YourApp.xcodeproj/              # App shell (minimal wrapper)
-├── YourApp/                        # App target - just the entry point
+├── CardShowPro.xcworkspace/            # Workspace container
+├── CardShowPro.xcodeproj/              # App shell (minimal wrapper)
+├── CardShowPro/                        # App target - just the entry point
 │   ├── Assets.xcassets/
-│   ├── YourAppApp.swift           # @main entry point only
-│   └── YourApp.xctestplan
-├── YourAppPackage/                 # All features and business logic
+│   ├── CardShowProApp.swift           # @main entry point only
+│   └── CardShowPro.xctestplan
+├── CardShowProPackage/                 # All features and business logic
 │   ├── Package.swift
 │   ├── Sources/
-│   │   └── YourAppFeature/        # Feature modules
+│   │   └── CardShowProFeature/        # Feature modules
 │   └── Tests/
-│       └── YourAppFeatureTests/   # Swift Testing tests
-└── YourAppUITests/                 # UI automation tests
+│       └── CardShowProFeatureTests/   # Swift Testing tests
+└── CardShowProUITests/                 # UI automation tests
 ```
 
-**Important:** All development work should be done in the **YourAppPackage** Swift Package, not in the app project. The app project is merely a thin wrapper that imports and launches the package features.
+**Important:** All development work should be done in the **CardShowProPackage** Swift Package, not in the app project. The app project is merely a thin wrapper that imports and launches the package features.
 
 # Code Quality & Style Guidelines
 
@@ -438,12 +438,12 @@ To work with this project, build, test, and development commands should use Xcod
 ```javascript
 // Discover Xcode projects in the workspace
 discover_projs({
-    workspaceRoot: "/path/to/YourApp"
+    workspaceRoot: "/Users/preem/Desktop/CardshowPro"
 })
 
 // List available schemes
 list_schems_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace"
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace"
 })
 ```
 
@@ -452,16 +452,16 @@ list_schems_ws({
 ```javascript
 // Build for iPhone simulator by name
 build_sim_name_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace",
-    scheme: "YourApp",
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace",
+    scheme: "CardShowPro",
     simulatorName: "iPhone 16",
     configuration: "Debug"
 })
 
 // Build and run in one step
 build_run_sim_name_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace",
-    scheme: "YourApp", 
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace",
+    scheme: "CardShowPro",
     simulatorName: "iPhone 16"
 })
 ```
@@ -474,8 +474,8 @@ list_devices()
 
 // Build for physical device
 build_dev_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace",
-    scheme: "YourApp",
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace",
+    scheme: "CardShowPro",
     configuration: "Debug"
 })
 ```
@@ -485,21 +485,21 @@ build_dev_ws({
 ```javascript
 // Run tests on simulator
 test_sim_name_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace",
-    scheme: "YourApp",
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace",
+    scheme: "CardShowPro",
     simulatorName: "iPhone 16"
 })
 
 // Run tests on device
 test_device_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace",
-    scheme: "YourApp",
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace",
+    scheme: "CardShowPro",
     deviceId: "DEVICE_UUID_HERE"
 })
 
 // Test Swift Package
 swift_package_test({
-    packagePath: "/path/to/YourAppPackage"
+    packagePath: "/Users/preem/Desktop/CardshowPro/CardShowProPackage"
 })
 ```
 
@@ -519,13 +519,13 @@ boot_sim({
 // Install app
 install_app_sim({
     simulatorUuid: "SIMULATOR_UUID",
-    appPath: "/path/to/YourApp.app"
+    appPath: "/path/to/CardShowPro.app"
 })
 
 // Launch app
 launch_app_sim({
     simulatorUuid: "SIMULATOR_UUID",
-    bundleId: "com.example.YourApp"
+    bundleId: "com.cardshowpro.app"
 })
 ```
 
@@ -535,13 +535,13 @@ launch_app_sim({
 // Install on device
 install_app_device({
     deviceId: "DEVICE_UUID",
-    appPath: "/path/to/YourApp.app"
+    appPath: "/path/to/CardShowPro.app"
 })
 
 // Launch on device
 launch_app_device({
     deviceId: "DEVICE_UUID",
-    bundleId: "com.example.YourApp"
+    bundleId: "com.cardshowpro.app"
 })
 ```
 
@@ -578,7 +578,7 @@ screenshot({
 // Start capturing simulator logs
 start_sim_log_cap({
     simulatorUuid: "SIMULATOR_UUID",
-    bundleId: "com.example.YourApp"
+    bundleId: "com.cardshowpro.app"
 })
 
 // Stop and retrieve logs
@@ -589,7 +589,7 @@ stop_sim_log_cap({
 // Device logs
 start_device_log_cap({
     deviceId: "DEVICE_UUID",
-    bundleId: "com.example.YourApp"
+    bundleId: "com.cardshowpro.app"
 })
 ```
 
@@ -598,18 +598,18 @@ start_device_log_cap({
 ```javascript
 // Get bundle ID from app
 get_app_bundle_id({
-    appPath: "/path/to/YourApp.app"
+    appPath: "/path/to/CardShowPro.app"
 })
 
 // Clean build artifacts
 clean_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace"
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace"
 })
 
 // Get app path for simulator
 get_sim_app_path_name_ws({
-    workspacePath: "/path/to/YourApp.xcworkspace",
-    scheme: "YourApp",
+    workspacePath: "/Users/preem/Desktop/CardshowPro/CardShowPro.xcworkspace",
+    scheme: "CardShowPro",
     platform: "iOS Simulator",
     simulatorName: "iPhone 16"
 })
@@ -617,8 +617,8 @@ get_sim_app_path_name_ws({
 
 # Development Workflow
 
-1. **Make changes in the Package**: All feature development happens in YourAppPackage/Sources/
-2. **Write tests**: Add Swift Testing tests in YourAppPackage/Tests/
+1. **Make changes in the Package**: All feature development happens in CardShowProPackage/Sources/
+2. **Write tests**: Add Swift Testing tests in CardShowProPackage/Tests/
 3. **Build and test**: Use XcodeBuildMCP tools to build and run tests
 4. **Run on simulator**: Deploy to simulator for manual testing
 5. **UI automation**: Use describe_ui and automation tools for UI testing

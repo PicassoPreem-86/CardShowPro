@@ -209,6 +209,7 @@ struct CameraView: View {
             }
         }
         .statusBarHidden()
+        .toolbar(.hidden, for: .tabBar)
         .task {
             await setupCamera()
         }
