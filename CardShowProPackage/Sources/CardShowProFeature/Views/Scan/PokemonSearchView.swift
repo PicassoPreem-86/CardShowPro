@@ -371,6 +371,12 @@ struct PokemonSearchView: View {
                 } catch {
                     guard !Task.isCancelled else { return }
 
+                    // Ignore cancellation errors (user is still typing)
+                    if (error as? CancellationError) != nil {
+                        return
+                    }
+
+                    // Only show real network errors
                     state.searchResults = []
                     state.isLoading = false
                     state.errorMessage = error.localizedDescription

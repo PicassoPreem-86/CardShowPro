@@ -2,9 +2,8 @@ import Foundation
 import OSLog
 
 /// Service for interacting with PokemonTCG.io API
-@MainActor
 @Observable
-final class PokemonTCGService {
+final class PokemonTCGService: @unchecked Sendable {
     static let shared = PokemonTCGService()
 
     private let networkService = NetworkService.shared
@@ -24,15 +23,15 @@ final class PokemonTCGService {
     // MARK: - Public API
 
     /// Search for Pokemon with autocomplete
-    func searchPokemon(_ query: String) async throws -> [PokemonSearchResult] {
+    nonisolated func searchPokemon(_ query: String) async throws -> [PokemonSearchResult] {
         guard !query.isEmpty else {
             return []
         }
 
         logger.info("Searching for Pokemon: \(query)")
 
-        isLoading = true
-        defer { isLoading = false }
+        await MainActor.run { isLoading = true }
+        defer { Task { @MainActor in isLoading = false } }
 
         // Search for cards matching the query - use wildcard for autocomplete
         let searchQuery = "name:\(query)*"
@@ -73,17 +72,17 @@ final class PokemonTCGService {
 
         } catch {
             logger.error("Search failed: \(error.localizedDescription)")
-            lastError = error
+            await MainActor.run { lastError = error }
             throw error
         }
     }
 
     /// Get all sets for a specific Pokemon
-    func getSetsForPokemon(_ pokemonName: String) async throws -> [CardSet] {
+    nonisolated func getSetsForPokemon(_ pokemonName: String) async throws -> [CardSet] {
         logger.info("Fetching sets for Pokemon: \(pokemonName)")
 
-        isLoading = true
-        defer { isLoading = false }
+        await MainActor.run { isLoading = true }
+        defer { Task { @MainActor in isLoading = false } }
 
         let searchQuery = "name:\"\(pokemonName)\""
         let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
@@ -125,17 +124,17 @@ final class PokemonTCGService {
 
         } catch {
             logger.error("Failed to fetch sets: \(error.localizedDescription)")
-            lastError = error
+            await MainActor.run { lastError = error }
             throw error
         }
     }
 
     /// Get specific card with pricing
-    func getCard(pokemonName: String, setID: String, cardNumber: String) async throws -> (card: PokemonTCGResponse.PokemonTCGCard, pricing: CardPricing) {
+    nonisolated func getCard(pokemonName: String, setID: String, cardNumber: String) async throws -> (card: PokemonTCGResponse.PokemonTCGCard, pricing: CardPricing) {
         logger.info("Fetching card: \(pokemonName) from set: \(setID), number: \(cardNumber)")
 
-        isLoading = true
-        defer { isLoading = false }
+        await MainActor.run { isLoading = true }
+        defer { Task { @MainActor in isLoading = false } }
 
         // Build search query with all parameters
         var queryParts: [String] = []
@@ -183,7 +182,7 @@ final class PokemonTCGService {
 
         } catch {
             logger.error("Failed to fetch card: \(error.localizedDescription)")
-            lastError = error
+            await MainActor.run { lastError = error }
             throw error
         }
     }

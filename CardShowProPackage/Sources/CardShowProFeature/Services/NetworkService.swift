@@ -47,7 +47,6 @@ enum NetworkError: LocalizedError {
 }
 
 /// Base network service for making HTTP requests
-@MainActor
 final class NetworkService: Sendable {
     static let shared = NetworkService()
 
