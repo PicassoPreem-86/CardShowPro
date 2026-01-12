@@ -1,6 +1,6 @@
 import Foundation
 import SwiftData
-import UIKit
+import SwiftUI
 
 /// Persistent storage model for cards in the inventory
 @Model
@@ -41,8 +41,12 @@ public final class InventoryCard {
 
     /// Convenience initializer from ScannedCard
     convenience init(from scannedCard: ScannedCard) {
-        // Convert UIImage to PNG data
+        // Convert Image to PNG data
+        #if canImport(UIKit)
         let imageData = scannedCard.image.pngData()
+        #else
+        let imageData: Data? = nil
+        #endif
 
         self.init(
             id: scannedCard.id,
@@ -57,11 +61,13 @@ public final class InventoryCard {
         )
     }
 
-    /// Convert to UIImage if data exists
+    /// Convert to UIImage if data exists (iOS only)
+    #if canImport(UIKit)
     public var image: UIImage? {
         guard let imageData else { return nil }
         return UIImage(data: imageData)
     }
+    #endif
 
     /// Get the CardGame enum from the stored string
     public var game: CardGame {

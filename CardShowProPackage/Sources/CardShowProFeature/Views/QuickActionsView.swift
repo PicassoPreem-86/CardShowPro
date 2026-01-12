@@ -2,6 +2,8 @@ import SwiftUI
 
 struct QuickActionsView: View {
     var body: some View {
-        CameraView()
+        NavigationStack {
+            CardPriceLookupView()
+        }
     }
 }

@@ -321,15 +321,6 @@ enum CardCategory: String, CaseIterable {
     }
 }
 
-enum CardCondition: String, CaseIterable {
-    case mint = "Mint"
-    case nearMint = "Near Mint"
-    case excellent = "Excellent"
-    case good = "Good"
-    case played = "Played"
-    case poor = "Poor"
-}
-
 enum ImagePickerSource {
     case camera
     case photoLibrary

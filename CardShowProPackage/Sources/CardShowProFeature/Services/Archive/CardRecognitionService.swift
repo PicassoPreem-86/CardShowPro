@@ -1,5 +1,5 @@
 import Foundation
-import UIKit
+import SwiftUI
 
 /// Service for recognizing trading cards from images using Ximilar API
 /// Supports multiple TCG games including Pokemon, One Piece, and more
@@ -60,6 +60,7 @@ final class CardRecognitionService {
     ///   - image: The image containing the card to recognize
     ///   - game: The trading card game type (defaults to Pokemon)
     /// - Returns: Recognition result with card details
+    #if canImport(UIKit)
     func recognizeCard(from image: UIImage, game: CardGame = .pokemon) async throws -> RecognitionResult {
         isProcessing = true
         defer { isProcessing = false }
@@ -78,6 +79,7 @@ final class CardRecognitionService {
             return try await mockRecognition(imageData: imageData, game: game)
         }
     }
+    #endif
 
     // MARK: - Ximilar API Integration
 
@@ -244,6 +246,7 @@ final class CardRecognitionService {
     // MARK: - Image Processing
 
     /// Compress image to reduce upload size and processing time
+    #if canImport(UIKit)
     private func compressImage(_ image: UIImage, maxSizeKB: Int) -> Data? {
         let maxSizeBytes = maxSizeKB * 1024
         var compression: CGFloat = 0.9
@@ -273,6 +276,7 @@ final class CardRecognitionService {
 
         return imageData
     }
+    #endif
 }
 
 // MARK: - Configuration Helper

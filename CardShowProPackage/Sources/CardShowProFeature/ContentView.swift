@@ -4,41 +4,48 @@ public struct ContentView: View {
     @State private var appState = AppState()
 
     public var body: some View {
-        TabView(selection: $appState.selectedTab) {
-            DashboardView()
-                .environment(appState)
-                .tabItem {
-                    Label("Dashboard", systemImage: "chart.bar.fill")
-                }
-                .tag(AppState.Tab.dashboard)
+        ZStack {
+            // Background layer - renders first, always visible
+            NebulaBackgroundView()
 
-            ManualEntryFlow()
-                .environment(appState)
-                .tabItem {
-                    Label("Scan", systemImage: "text.magnifyingglass")
-                }
-                .tag(AppState.Tab.scan)
+            // TabView layer - on top, made transparent
+            TabView(selection: $appState.selectedTab) {
+                DashboardView()
+                    .environment(appState)
+                    .tabItem {
+                        Label("Dashboard", systemImage: "chart.bar.fill")
+                    }
+                    .tag(AppState.Tab.dashboard)
 
-            CardListView()
-                .environment(appState.scanSession)
-                .tabItem {
-                    Label("Inventory", systemImage: "archivebox.fill")
-                }
-                .tag(AppState.Tab.inventory)
+                CardPriceLookupView()
+                    .environment(appState)
+                    .tabItem {
+                        Label("Scan", systemImage: "text.magnifyingglass")
+                    }
+                    .tag(AppState.Tab.scan)
 
-            ToolsView()
-                .environment(appState)
-                .tabItem {
-                    Label("Tools", systemImage: "wrench.and.screwdriver.fill")
-                }
-                .tag(AppState.Tab.tools)
+                CardListView()
+                    .environment(appState.scanSession)
+                    .tabItem {
+                        Label("Inventory", systemImage: "archivebox.fill")
+                    }
+                    .tag(AppState.Tab.inventory)
+
+                ToolsView()
+                    .environment(appState)
+                    .tabItem {
+                        Label("Tools", systemImage: "wrench.and.screwdriver.fill")
+                    }
+                    .tag(AppState.Tab.tools)
+            }
+            .toolbarBackground(.hidden, for: .tabBar)
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            // Configure tab bar appearance for better visibility
+            // Configure tab bar appearance with TRANSPARENT background to show nebula
             let appearance = UITabBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = UIColor.black
+            appearance.configureWithTransparentBackground()
+            appearance.backgroundColor = UIColor.black.withAlphaComponent(0.5)
 
             UITabBar.appearance().standardAppearance = appearance
             UITabBar.appearance().scrollEdgeAppearance = appearance

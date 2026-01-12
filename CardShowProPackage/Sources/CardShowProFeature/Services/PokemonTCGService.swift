@@ -129,7 +129,158 @@ final class PokemonTCGService: @unchecked Sendable {
         }
     }
 
-    /// Get specific card with pricing
+    /// Search for cards by name and optional number (streamlined vendor flow)
+    nonisolated func searchCard(name: String, number: String?) async throws -> [CardMatch] {
+        guard !name.isEmpty else {
+            return []
+        }
+
+        logger.info("Searching for card: \(name), number: \(number ?? "none")")
+
+        await MainActor.run { isLoading = true }
+        defer { Task { @MainActor in isLoading = false } }
+
+        // Build search query
+        var queryParts: [String] = []
+        queryParts.append("name:\"\(name)\"")
+
+        // Add card number if provided
+        if let number = number, !number.isEmpty {
+            let cleanNumber = number
+                .replacingOccurrences(of: "#", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            if !cleanNumber.isEmpty {
+                queryParts.append("number:\(cleanNumber)")
+            }
+        }
+
+        let query = queryParts.joined(separator: " ")
+        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+
+        guard let url = URL(string: "\(baseURL)/cards?q=\(encodedQuery)&pageSize=50&orderBy=-set.releaseDate") else {
+            throw NetworkError.invalidURL
+        }
+
+        var headers: [String: String] = [:]
+        if !apiKey.isEmpty {
+            headers["X-Api-Key"] = apiKey
+        }
+
+        do {
+            let response: PokemonTCGResponse = try await networkService.get(
+                url: url,
+                headers: headers,
+                retryCount: 2
+            )
+
+            // Convert to CardMatch objects
+            let matches = response.data.map { card in
+                CardMatch(
+                    id: card.id,
+                    cardName: card.name,
+                    setName: card.set.name,
+                    setID: card.set.id,
+                    cardNumber: card.number,
+                    imageURL: URL(string: card.images.small)
+                )
+            }
+
+            logger.info("Found \(matches.count) matching cards")
+            return matches
+
+        } catch {
+            logger.error("Card search failed: \(error.localizedDescription)")
+            await MainActor.run { lastError = error }
+            throw error
+        }
+    }
+
+    /// Get specific card with pricing by card ID
+    nonisolated func getCardByID(_ cardID: String) async throws -> (card: PokemonTCGResponse.PokemonTCGCard, pricing: CardPricing) {
+        logger.info("Fetching card by ID: \(cardID)")
+
+        await MainActor.run { isLoading = true }
+        defer { Task { @MainActor in isLoading = false } }
+
+        guard let url = URL(string: "\(baseURL)/cards/\(cardID)") else {
+            throw NetworkError.invalidURL
+        }
+
+        var headers: [String: String] = [:]
+        if !apiKey.isEmpty {
+            headers["X-Api-Key"] = apiKey
+        }
+
+        do {
+            let response: PokemonTCGSingleResponse = try await networkService.get(
+                url: url,
+                headers: headers,
+                retryCount: 2
+            )
+
+            // Extract pricing from the card
+            let pricing = extractPricing(from: response.data)
+
+            logger.info("Successfully fetched card and pricing")
+            return (response.data, pricing)
+
+        } catch {
+            logger.error("Failed to fetch card: \(error.localizedDescription)")
+            await MainActor.run { lastError = error }
+            throw error
+        }
+    }
+
+    /// Get detailed TCGPlayer pricing with all variants
+    nonisolated func getDetailedPricing(cardID: String) async throws -> DetailedTCGPlayerPricing {
+        logger.info("Fetching detailed pricing for card ID: \(cardID)")
+
+        await MainActor.run { isLoading = true }
+        defer { Task { @MainActor in isLoading = false } }
+
+        guard let url = URL(string: "\(baseURL)/cards/\(cardID)") else {
+            throw NetworkError.invalidURL
+        }
+
+        var headers: [String: String] = [:]
+        if !apiKey.isEmpty {
+            headers["X-Api-Key"] = apiKey
+        }
+
+        do {
+            let response: PokemonTCGSingleResponse = try await networkService.get(
+                url: url,
+                headers: headers,
+                retryCount: 2
+            )
+
+            // Extract ALL price variants from TCGPlayer data
+            let card = response.data
+            guard let tcgPlayer = card.tcgplayer?.prices else {
+                logger.error("No TCGPlayer pricing available for card")
+                throw PricingError.noPricingAvailable
+            }
+
+            // Convert to DetailedTCGPlayerPricing
+            let detailedPricing = DetailedTCGPlayerPricing(
+                normal: tcgPlayer.normal.map { convertToPriceBreakdown($0) },
+                holofoil: tcgPlayer.holofoil.map { convertToPriceBreakdown($0) },
+                reverseHolofoil: tcgPlayer.reverseHolofoil.map { convertToPriceBreakdown($0) },
+                firstEdition: tcgPlayer.firstEditionHolofoil.map { convertToPriceBreakdown($0) },
+                unlimited: tcgPlayer.unlimitedHolofoil.map { convertToPriceBreakdown($0) }
+            )
+
+            logger.info("Successfully fetched detailed pricing with \(detailedPricing.availableVariants.count) variants")
+            return detailedPricing
+
+        } catch {
+            logger.error("Failed to fetch detailed pricing: \(error.localizedDescription)")
+            await MainActor.run { lastError = error }
+            throw error
+        }
+    }
+
+    /// Get specific card with pricing (legacy method for backward compatibility)
     nonisolated func getCard(pokemonName: String, setID: String, cardNumber: String) async throws -> (card: PokemonTCGResponse.PokemonTCGCard, pricing: CardPricing) {
         logger.info("Fetching card: \(pokemonName) from set: \(setID), number: \(cardNumber)")
 
@@ -188,6 +339,16 @@ final class PokemonTCGService: @unchecked Sendable {
     }
 
     // MARK: - Helper Methods
+
+    /// Convert TCGPlayer PricePoint to DetailedTCGPlayerPricing.PriceBreakdown
+    private func convertToPriceBreakdown(_ pricePoint: PokemonTCGResponse.PokemonTCGCard.TCGPlayerPricing.PricePoint) -> DetailedTCGPlayerPricing.PriceBreakdown {
+        return DetailedTCGPlayerPricing.PriceBreakdown(
+            low: pricePoint.low,
+            mid: pricePoint.mid,
+            high: pricePoint.high,
+            market: pricePoint.market
+        )
+    }
 
     /// Extract pricing from a card
     private func extractPricing(from card: PokemonTCGResponse.PokemonTCGCard) -> CardPricing {

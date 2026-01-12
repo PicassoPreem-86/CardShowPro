@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Output phase view for previewing and copying generated listing
 struct OutputPhaseView: View {

@@ -33,7 +33,6 @@ struct DashboardView: View {
                     .padding(.horizontal)
                     .padding(.top)
                     .padding(.bottom, 4)
-                    .background(Color(.systemBackground))
 
                 // Scrollable content below
                 ScrollView {
@@ -55,6 +54,7 @@ struct DashboardView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -69,7 +69,9 @@ struct DashboardView: View {
                 SettingsView(isShowModeActive: $appState.isShowModeActive)
             }
             .sheet(isPresented: $showCamera) {
-                CameraView()
+                NavigationStack {
+                    CardPriceLookupView()
+                }
             }
             .sheet(isPresented: $showAddItem) {
                 NavigationStack {
@@ -88,8 +90,8 @@ struct DashboardView: View {
 
             HStack(spacing: 12) {
                 QuickActionButton(
-                    title: "Quick\nScan",
-                    icon: "camera.fill",
+                    title: "Price\nLookup",
+                    icon: "magnifyingglass.circle.fill",
                     color: .cyan
                 ) {
                     showCamera = true

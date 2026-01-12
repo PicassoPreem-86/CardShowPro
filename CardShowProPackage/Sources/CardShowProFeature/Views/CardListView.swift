@@ -89,7 +89,7 @@ struct CardListView: View {
                     .padding(.horizontal)
                     .padding(.vertical, 12)
                 }
-                .background(Color(.systemGroupedBackground))
+                .background(Color.clear)
 
                 // Card List or Grid
                 if filteredCards.isEmpty {
@@ -104,6 +104,7 @@ struct CardListView: View {
             }
             .navigationTitle("Inventory")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .searchable(text: $searchText, prompt: "Search cards...")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -267,7 +268,7 @@ struct CardListView: View {
             Spacer()
         }
         .padding()
-        .background(Color(.systemBackground))
+        .background(DesignSystem.Colors.cardBackground)
     }
 
     private var emptyState: some View {
@@ -414,7 +415,7 @@ struct CardListView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.clear)
     }
 }
 
@@ -598,7 +599,7 @@ struct InventoryCardGridItem: View {
             }
         }
         .padding(12)
-        .background(Color(.systemBackground))
+        .background(DesignSystem.Colors.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 5)
     }

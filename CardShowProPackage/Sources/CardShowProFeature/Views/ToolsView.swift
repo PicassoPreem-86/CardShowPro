@@ -116,7 +116,9 @@ struct ToolsView: View {
                 .padding()
             }
             .navigationTitle("Tools")
-            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .background(Color.clear)
         }
     }
 }
@@ -142,7 +144,7 @@ struct ToolSection<Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            .background(Color(.systemBackground))
+            .background(DesignSystem.Colors.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .shadow(color: .black.opacity(0.05), radius: 5)
         }
@@ -209,7 +211,7 @@ struct ToolRow: View {
                     .opacity(isComingSoon ? 0.3 : 1.0)
             }
             .padding(16)
-            .background(Color(.systemBackground))
+            .background(DesignSystem.Colors.cardBackground)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

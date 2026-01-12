@@ -7,41 +7,40 @@ import SwiftUI
 final class ScanFlowState {
     // MARK: - Flow Steps
     enum Step: Equatable {
-        case search
-        case setSelection(pokemonName: String)
-        case cardEntry(pokemonName: String, setName: String, setID: String)
+        case entry  // Single entry screen
         case success(card: InventoryCard)
     }
 
-    var currentStep: Step = .search
+    var currentStep: Step = .entry
     var isLoading = false
     var errorMessage: String?
 
-    // MARK: - Search State (Step 1)
-    var searchQuery = ""
-    var searchResults: [PokemonSearchResult] = []
-    var recentSearches: [String] {
-        get { UserDefaults.standard.stringArray(forKey: "recentPokemonSearches") ?? [] }
-        set { UserDefaults.standard.set(newValue, forKey: "recentPokemonSearches") }
-    }
-
-    // MARK: - Set Selection State (Step 2)
-    var availableSets: [CardSet] = []
-    var selectedPokemon: String = ""
-
-    // MARK: - Card Entry State (Step 3)
+    // MARK: - Entry State (Card Name, Number, Variant)
+    var cardName = ""
     var cardNumber = ""
     var selectedVariant: CardVariant = .standard
     var selectedCondition: CardCondition = .nearMint
     var fetchedPrice: Double?
     var cardImageURL: URL?
+
+    // Recent card names for quick entry
+    var recentCardNames: [String] {
+        get { UserDefaults.standard.stringArray(forKey: "recentCardNames") ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: "recentCardNames") }
+    }
+
+    // Bulk entry mode state
+    var isBulkMode = false
+    var bulkModeSessionCount = 0
+
+    // MARK: - Disambiguation (when multiple sets match)
+    var availableMatches: [CardMatch] = []
     var selectedSet: CardSet?
 
     // MARK: - Actions
     func resetFlow() {
-        currentStep = .search
-        searchQuery = ""
-        searchResults = []
+        currentStep = .entry
+        cardName = ""
         cardNumber = ""
         selectedVariant = .standard
         selectedCondition = .nearMint
@@ -49,14 +48,36 @@ final class ScanFlowState {
         cardImageURL = nil
         selectedSet = nil
         errorMessage = nil
+        availableMatches = []
     }
 
-    func addToRecentSearches(_ pokemon: String) {
-        var recent = recentSearches
-        recent.removeAll { $0 == pokemon }
-        recent.insert(pokemon, at: 0)
-        recentSearches = Array(recent.prefix(5)) // Keep last 5
+    func resetForBulkEntry() {
+        // Keep variant and condition for bulk mode
+        cardName = ""
+        cardNumber = ""
+        fetchedPrice = nil
+        cardImageURL = nil
+        selectedSet = nil
+        errorMessage = nil
+        availableMatches = []
     }
+
+    func addToRecentCardNames(_ name: String) {
+        var recent = recentCardNames
+        recent.removeAll { $0 == name }
+        recent.insert(name, at: 0)
+        recentCardNames = Array(recent.prefix(10)) // Keep last 10
+    }
+}
+
+/// Represents a card match from search (includes set info)
+struct CardMatch: Identifiable, Sendable {
+    let id: String  // Card ID
+    let cardName: String
+    let setName: String
+    let setID: String
+    let cardNumber: String
+    let imageURL: URL?
 }
 
 /// Represents a Pokemon card set

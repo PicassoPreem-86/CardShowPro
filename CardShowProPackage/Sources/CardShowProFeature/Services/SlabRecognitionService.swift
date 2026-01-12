@@ -1,5 +1,5 @@
 import Foundation
-import UIKit
+import SwiftUI
 
 /// Service for recognizing graded card slabs using Ximilar Visual AI
 @MainActor
@@ -30,6 +30,7 @@ final class SlabRecognitionService: Sendable {
     ///   - game: The card game type (Pokemon, One Piece, etc.)
     /// - Returns: SlabRecognitionResult with card info and grading details
     /// - Throws: SlabRecognitionError if recognition fails
+    #if canImport(UIKit)
     func recognizeSlab(from image: UIImage, game: CardGame = .pokemon) async throws -> SlabRecognitionResult {
         // Use mock data for testing if real API is disabled
         if !useRealAPI {
@@ -91,10 +92,11 @@ final class SlabRecognitionService: Sendable {
         if result.cardInfo.confidence < 0.70 {
             throw SlabRecognitionError.lowConfidence(score: result.cardInfo.confidence)
         }
-        
+
         return result
     }
-    
+    #endif
+
     // MARK: - Mock Data
     
     /// Mock slab recognition for testing without API calls
