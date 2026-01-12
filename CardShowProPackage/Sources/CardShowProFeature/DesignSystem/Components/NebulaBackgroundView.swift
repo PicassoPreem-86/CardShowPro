@@ -23,20 +23,21 @@ public struct NebulaBackgroundView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
 
             // Main nebula image background with dark overlay for text readability
             // CRITICAL: Must use bundle: .main because this component is in the Swift Package
             // but the image asset is in the main app bundle
-            Image("NebulaBackground", bundle: .main)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(Color.black.opacity(0.3))
-                .ignoresSafeArea()
+            GeometryReader { geometry in
+                Image("NebulaBackground", bundle: .main)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .overlay(Color.black.opacity(0.2))
+            }
+            .ignoresSafeArea()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     public init() {}

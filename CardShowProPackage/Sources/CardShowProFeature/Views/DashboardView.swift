@@ -27,7 +27,12 @@ struct DashboardView: View {
         @Bindable var appState = appState
 
         NavigationStack {
-            VStack(spacing: 0) {
+            ZStack {
+                // Nebula background layer
+                NebulaBackgroundView()
+
+                // Content layer
+                VStack(spacing: 0) {
                 // Quick Actions Section - Fixed at top
                 quickActionsSection
                     .padding(.horizontal)
@@ -52,6 +57,7 @@ struct DashboardView: View {
                     .padding(.top, 4)
                     .padding(.bottom)
                 }
+            }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -322,7 +328,7 @@ struct DashboardView: View {
                 .padding(.top, 4)
                 .padding(.bottom, 20)
             }
-            .background(Color.black)
+            .background(DesignSystem.Colors.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 20))
         }
     }
@@ -350,7 +356,7 @@ struct DashboardView: View {
                         .foregroundStyle(.orange)
                 }
                 .padding()
-                .background(Color(.systemBackground))
+                .background(DesignSystem.Colors.cardBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .shadow(color: .black.opacity(0.05), radius: 5)
 
@@ -683,7 +689,7 @@ struct BusinessMetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.systemBackground))
+        .background(DesignSystem.Colors.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 5)
     }

@@ -9,36 +9,43 @@ struct CardPriceLookupView: View {
     private let pokemonService = PokemonTCGService.shared
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: DesignSystem.Spacing.lg) {
-                // Header
-                headerSection
+        NavigationStack {
+            ZStack {
+                // Nebula background layer
+                NebulaBackgroundView()
 
-                // Input Sections
-                inputSections
+                // Content layer
+                ScrollView {
+                VStack(spacing: DesignSystem.Spacing.lg) {
+                    // Header
+                    headerSection
 
-                // Action Button
-                lookupButton
+                    // Input Sections
+                    inputSections
 
-                // Results Section
-                if lookupState.isLoading {
-                    loadingSection
-                } else if let errorMessage = lookupState.errorMessage {
-                    errorSection(errorMessage)
-                } else if lookupState.tcgPlayerPrices != nil {
-                    pricingResultsSection
+                    // Action Button
+                    lookupButton
+
+                    // Results Section
+                    if lookupState.isLoading {
+                        loadingSection
+                    } else if let errorMessage = lookupState.errorMessage {
+                        errorSection(errorMessage)
+                    } else if lookupState.tcgPlayerPrices != nil {
+                        pricingResultsSection
+                    }
                 }
+                .frame(maxWidth: 600)
+                .padding(DesignSystem.Spacing.md)
             }
-            .frame(maxWidth: 600)
-            .frame(maxWidth: .infinity)
-            .padding(DesignSystem.Spacing.md)
-        }
-        .background(Color.clear)
-        .navigationTitle("Price Lookup")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showMatchSelection) {
-            matchSelectionSheet
+            }
+            .background(Color.clear)
+            .navigationTitle("Price Lookup")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showMatchSelection) {
+                matchSelectionSheet
+            }
         }
     }
 

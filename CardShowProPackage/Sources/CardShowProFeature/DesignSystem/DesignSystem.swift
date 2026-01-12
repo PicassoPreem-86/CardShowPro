@@ -48,20 +48,20 @@ public enum DesignSystem {
 
         // MARK: Background Colors
 
-        /// Rich dark background - Primary (#0A0E27)
-        public static let backgroundPrimary = Color(hex: "#0A0E27")
+        /// Rich dark background - Primary (#0A0E27D9) - 85% opacity for glass morphism
+        public static let backgroundPrimary = Color(hex: "#0A0E27D9")
 
-        /// Rich dark background - Secondary (#121629)
-        public static let backgroundSecondary = Color(hex: "#121629")
+        /// Rich dark background - Secondary (#121629D9) - 85% opacity for glass morphism
+        public static let backgroundSecondary = Color(hex: "#121629D9")
 
-        /// Rich dark background - Tertiary (#1A1F3A)
-        public static let backgroundTertiary = Color(hex: "#1A1F3A")
+        /// Rich dark background - Tertiary (#1A1F3AD9) - 85% opacity for glass morphism
+        public static let backgroundTertiary = Color(hex: "#1A1F3AD9")
 
-        /// Card background with slight elevation (#1E2442)
-        public static let cardBackground = Color(hex: "#1E2442")
+        /// Card background with slight elevation (#1E2442D9) - 85% opacity for glass morphism
+        public static let cardBackground = Color(hex: "#1E2442D9")
 
-        /// Premium card background with gradient (#2A2F4A)
-        public static let premiumCardBackground = Color(hex: "#2A2F4A")
+        /// Premium card background with gradient (#2A2F4AD9) - 85% opacity for glass morphism
+        public static let premiumCardBackground = Color(hex: "#2A2F4AD9")
 
         // MARK: Text Colors
 

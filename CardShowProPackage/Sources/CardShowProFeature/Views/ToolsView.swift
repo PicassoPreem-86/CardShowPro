@@ -3,7 +3,12 @@ import SwiftUI
 struct ToolsView: View {
     var body: some View {
         NavigationStack {
-            ScrollView {
+            ZStack {
+                // Nebula background layer
+                NebulaBackgroundView()
+
+                // Content layer
+                ScrollView {
                 VStack(spacing: 16) {
                     // Trading & Analysis Tools
                     ToolSection(title: "Trading & Analysis") {
@@ -114,6 +119,7 @@ struct ToolsView: View {
                     }
                 }
                 .padding()
+            }
             }
             .navigationTitle("Tools")
             .navigationBarTitleDisplayMode(.inline)

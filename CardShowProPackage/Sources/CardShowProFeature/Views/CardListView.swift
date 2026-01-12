@@ -66,7 +66,12 @@ struct CardListView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
+            ZStack {
+                // Nebula background layer
+                NebulaBackgroundView()
+
+                // Content layer
+                VStack(spacing: 0) {
                 // Stats Header (when not searching)
                 if searchText.isEmpty {
                     statsHeader
@@ -101,6 +106,7 @@ struct CardListView: View {
                         cardGridView
                     }
                 }
+            }
             }
             .navigationTitle("Inventory")
             .navigationBarTitleDisplayMode(.inline)
@@ -395,6 +401,7 @@ struct CardListView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .refreshable {
             await refreshInventory()
         }
