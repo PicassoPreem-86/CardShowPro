@@ -2,44 +2,37 @@ import SwiftUI
 
 /// Main contacts list view with search and FAB to add new contacts
 struct ContactsView: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var state = ContactsState()
     @State private var showingAddSheet = false
-    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
-            ZStack(alignment: .bottomTrailing) {
-                // Main Content
-                Group {
-                    if state.filteredContacts.isEmpty {
-                        emptyStateView
-                    } else {
-                        contactsList
-                    }
+        ZStack(alignment: .bottomTrailing) {
+            // Main Content
+            VStack(spacing: 0) {
+                // Filter Bar
+                if !state.contacts.isEmpty {
+                    ContactFilterBar(selectedFilter: $state.selectedFilter)
+                        .background(DesignSystem.Colors.backgroundPrimary)
                 }
 
-                // Floating Action Button
-                fabButton
-            }
-            .navigationTitle("Contacts")
-            .searchable(text: $state.searchText, prompt: "Search contacts")
-            .background(DesignSystem.Colors.backgroundPrimary)
-            .navigationDestination(for: Contact.self) { contact in
-                ContactDetailView(
-                    contact: contact,
-                    onUpdate: { updatedContact in
-                        state.updateContact(updatedContact)
-                    },
-                    onDelete: {
-                        state.deleteContact(contact)
-                        navigationPath.removeLast()
-                    }
-                )
-            }
-            .sheet(isPresented: $showingAddSheet) {
-                AddEditContactView { newContact in
-                    state.addContact(newContact)
+                // Contacts List or Empty State
+                if state.filteredContacts.isEmpty {
+                    emptyStateView
+                } else {
+                    contactsList
                 }
+            }
+
+            // Floating Action Button
+            fabButton
+        }
+        .navigationTitle("Contacts")
+        .searchable(text: $state.searchText, prompt: "Search contacts")
+        .background(DesignSystem.Colors.backgroundPrimary)
+        .sheet(isPresented: $showingAddSheet) {
+            AddEditContactView { newContact in
+                state.addContact(newContact)
             }
         }
     }
@@ -50,12 +43,30 @@ struct ContactsView: View {
     private var contactsList: some View {
         List {
             ForEach(state.filteredContacts) { contact in
-                NavigationLink(value: contact) {
+                NavigationLink {
+                    ContactDetailView(
+                        contact: contact,
+                        onUpdate: { updatedContact in
+                            state.updateContact(updatedContact)
+                        },
+                        onDelete: {
+                            state.deleteContact(contact)
+                            dismiss()
+                        }
+                    )
+                } label: {
                     ContactRowView(contact: contact)
                 }
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowInsets(EdgeInsets(top: 2, leading: DesignSystem.Spacing.sm, bottom: 2, trailing: DesignSystem.Spacing.sm))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        state.deleteContact(contact)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
             .onDelete { indexSet in
                 state.deleteContacts(at: indexSet)
@@ -63,6 +74,10 @@ struct ContactsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .bottom) {
+            // Spacer to prevent FAB from covering last contact
+            Color.clear.frame(height: 76)  // FAB height (60) + padding (16)
+        }
     }
 
     // MARK: - Empty State

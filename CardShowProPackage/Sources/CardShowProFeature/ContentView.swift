@@ -33,18 +33,46 @@ public struct ContentView: View {
                 }
                 .tag(AppState.Tab.tools)
         }
-        .toolbarBackground(.hidden, for: .tabBar)
         .preferredColorScheme(.dark)
     }
 
     public init() {
-        // CRITICAL FIX: Make TabView container transparent
-        // TabView uses UITabBarController under the hood, which applies
-        // an opaque system background that blocks ZStack backgrounds.
-        // We must configure UITabBar appearance to be transparent.
+        // Configure opaque tab bar with frosted glass effect
         let appearance = UITabBarAppearance()
-        appearance.configureWithTransparentBackground()
-        appearance.backgroundColor = UIColor.clear
+
+        // Use opaque background instead of transparent
+        appearance.configureWithOpaqueBackground()
+
+        // Set background to dark card color at 95% opacity for frosted effect
+        // #1E2442 = rgb(30, 36, 66) = rgb(0.118, 0.141, 0.259)
+        appearance.backgroundColor = UIColor(red: 0.118, green: 0.141, blue: 0.259, alpha: 0.95)
+
+        // Add native blur effect for glassmorphism
+        appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+
+        // Add subtle shadow for depth
+        appearance.shadowColor = UIColor.black.withAlphaComponent(0.3)
+
+        // Style tab items
+        let itemAppearance = UITabBarItemAppearance()
+
+        // Normal state (unselected) - Gray
+        itemAppearance.normal.iconColor = UIColor(white: 0.6, alpha: 1.0)
+        itemAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor(white: 0.6, alpha: 1.0),
+            .font: UIFont.systemFont(ofSize: 10, weight: .medium)
+        ]
+
+        // Selected state - Thunder Yellow (#FFD700 = rgb(255, 215, 0) = rgb(1.0, 0.843, 0.0))
+        itemAppearance.selected.iconColor = UIColor(red: 1.0, green: 0.843, blue: 0.0, alpha: 1.0)
+        itemAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor(red: 1.0, green: 0.843, blue: 0.0, alpha: 1.0),
+            .font: UIFont.systemFont(ofSize: 10, weight: .semibold)
+        ]
+
+        appearance.stackedLayoutAppearance = itemAppearance
+        appearance.inlineLayoutAppearance = itemAppearance
+        appearance.compactInlineLayoutAppearance = itemAppearance
 
         // Apply to all TabBar states
         UITabBar.appearance().standardAppearance = appearance

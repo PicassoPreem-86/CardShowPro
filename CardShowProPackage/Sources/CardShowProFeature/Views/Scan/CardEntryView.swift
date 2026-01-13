@@ -124,7 +124,7 @@ struct CardEntryView: View {
                 )
 
                 // Update state with fetched data
-                state.fetchedPrice = result.pricing.estimatedValue
+                state.fetchedPrice = result.pricing.marketValue
                 state.cardImageURL = URL(string: result.card.images.large)
 
             } catch {
@@ -150,11 +150,10 @@ struct CardEntryView: View {
             cardName: pokemonName,
             cardNumber: state.cardNumber,
             setName: setName,
-            gameType: CardGame.pokemon.rawValue,
-            estimatedValue: finalPrice,
-            confidence: 1.0, // Manual entry = 100% confidence
-            timestamp: Date(),
-            imageData: nil // We'll download the image in the future
+            marketValue: finalPrice,
+            acquiredDate: Date(),
+            imageData: nil, // We'll download the image in the future
+            confidence: 1.0 // Manual entry = 100% confidence
         )
 
         // Save to SwiftData

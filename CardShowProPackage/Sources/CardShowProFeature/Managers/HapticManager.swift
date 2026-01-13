@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 /// Centralized manager for all haptic feedback in the app
 ///
 /// Provides consistent haptic feedback across all features with proper
@@ -23,6 +27,7 @@ import SwiftUI
 /// // Prepare for upcoming haptic (optional, for best timing)
 /// HapticManager.shared.prepare()
 /// ```
+#if canImport(UIKit)
 @MainActor
 final class HapticManager {
     // MARK: - Singleton
@@ -112,3 +117,4 @@ final class HapticManager {
         notificationGenerator.prepare()
     }
 }
+#endif

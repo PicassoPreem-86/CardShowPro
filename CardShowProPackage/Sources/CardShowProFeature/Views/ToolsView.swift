@@ -51,12 +51,16 @@ struct ToolsView: View {
                         }
                         .buttonStyle(.plain)
 
-                        ToolRow(
-                            icon: "brain.head.profile",
-                            title: "Pro Market Agent",
-                            description: "AI-powered market insights and pricing",
-                            color: .cyan
-                        )
+                        Button { } label: {
+                            ToolRow(
+                                icon: "brain.head.profile",
+                                title: "Pro Market Agent",
+                                description: "AI-powered market insights and pricing",
+                                color: .cyan
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(true)
                     }
 
                     // Sales & Listing Tools
@@ -90,12 +94,16 @@ struct ToolsView: View {
 
                     // Organization Tools
                     ToolSection(title: "Organization") {
-                        ToolRow(
-                            icon: "storefront.fill",
-                            title: "Vendor Mode",
-                            description: "Manage card shows and events",
-                            color: .orange
-                        )
+                        Button { } label: {
+                            ToolRow(
+                                icon: "storefront.fill",
+                                title: "Vendor Mode",
+                                description: "Manage card shows and events",
+                                color: .orange
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(true)
 
                         NavigationLink {
                             ContactsView()
@@ -110,12 +118,16 @@ struct ToolsView: View {
                         }
                         .buttonStyle(.plain)
 
-                        ToolRow(
-                            icon: "rectangle.stack.fill.badge.person.crop",
-                            title: "Personal Collection",
-                            description: "Track your personal card collection",
-                            color: .purple
-                        )
+                        Button { } label: {
+                            ToolRow(
+                                icon: "rectangle.stack.fill.badge.person.crop",
+                                title: "Personal Collection",
+                                description: "Track your personal card collection",
+                                color: .purple
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(true)
                     }
                 }
                 .padding()
@@ -167,60 +179,53 @@ struct ToolRow: View {
     var isComingSoon: Bool = true // Default to coming soon until implemented
 
     var body: some View {
-        Button {
-            // Tool action - to be implemented
-        } label: {
-            HStack(spacing: 16) {
-                // Icon
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(color.gradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .opacity(isComingSoon ? 0.5 : 1.0)
+        HStack(spacing: 16) {
+            // Icon
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(color.gradient)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                // Content
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(title)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
 
-                        if isComingSoon {
-                            Text("SOON")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.orange)
-                                .clipShape(Capsule())
-                        }
+                    if isComingSoon {
+                        Text("SOON")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.orange)
+                            .clipShape(Capsule())
                     }
-
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
                 }
-                .opacity(isComingSoon ? 0.6 : 1.0)
 
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.tertiary)
-                    .opacity(isComingSoon ? 0.3 : 1.0)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
-            .padding(16)
-            .background(DesignSystem.Colors.cardBackground)
-            .contentShape(Rectangle())
+
+            Spacer()
+
+            // Chevron
+            Image(systemName: "chevron.right")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
-        .disabled(isComingSoon)
+        .padding(16)
+        .background(DesignSystem.Colors.cardBackground)
+        .contentShape(Rectangle())
+        .opacity(isComingSoon ? 0.6 : 1.0)
+        .allowsHitTesting(!isComingSoon)
     }
 }

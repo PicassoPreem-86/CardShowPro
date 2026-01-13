@@ -24,7 +24,7 @@ struct TradeCardRow: View {
                         .lineLimit(1)
                 }
 
-                Text(formatCurrency(card.estimatedValue))
+                Text(formatCurrency(card.marketValue))
                     .font(DesignSystem.Typography.labelSmall)
                     .foregroundStyle(DesignSystem.Colors.thunderYellow)
             }

@@ -16,7 +16,7 @@ struct AddCardSuccessView: View {
     }
 
     private var totalValue: Double {
-        inventoryCards.reduce(0) { $0 + $1.estimatedValue }
+        inventoryCards.reduce(0) { $0 + $1.marketValue }
     }
 
     var body: some View {
@@ -73,7 +73,7 @@ struct AddCardSuccessView: View {
             }
 
             // Price
-            Text("$\(String(format: "%.2f", card.estimatedValue))")
+            Text("$\(String(format: "%.2f", card.marketValue))")
                 .font(.title2)
                 .fontWeight(.bold)
                 .foregroundStyle(.green)
@@ -105,7 +105,7 @@ struct AddCardSuccessView: View {
                     HStack(spacing: 4) {
                         Text("$\(String(format: "%.2f", totalValue))")
                             .fontWeight(.bold)
-                        Text("(+$\(String(format: "%.2f", card.estimatedValue)))")
+                        Text("(+$\(String(format: "%.2f", card.marketValue)))")
                             .foregroundStyle(.green)
                             .fontWeight(.semibold)
                     }
@@ -199,6 +199,9 @@ struct AddCardSuccessView: View {
 
 // MARK: - Preview
 #Preview {
+    @Previewable @State var state = ScanFlowState()
+    @Previewable @State var appState = AppState()
+
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: InventoryCard.self, configurations: config)
 
@@ -207,23 +210,21 @@ struct AddCardSuccessView: View {
         cardName: "Pikachu",
         cardNumber: "25",
         setName: "Base Set",
-        estimatedValue: 150.00,
-        confidence: 0.95
+        marketValue: 150.00
     )
 
     let card2 = InventoryCard(
         cardName: "Charizard",
         cardNumber: "4",
         setName: "Base Set",
-        estimatedValue: 500.00,
-        confidence: 0.98
+        marketValue: 500.00
     )
 
-    container.mainContext.insert(card1)
-    container.mainContext.insert(card2)
-
-    let state = ScanFlowState()
-    let appState = AppState()
+    // Insert cards into context
+    let _ = {
+        container.mainContext.insert(card1)
+        container.mainContext.insert(card2)
+    }()
 
     return AddCardSuccessView(card: card1, state: state)
         .modelContainer(container)

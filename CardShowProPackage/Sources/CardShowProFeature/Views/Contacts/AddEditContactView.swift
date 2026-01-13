@@ -10,6 +10,9 @@ struct AddEditContactView: View {
     @State private var phone: String = ""
     @State private var email: String = ""
     @State private var notes: String = ""
+    @State private var contactType: ContactType = .customer
+    @State private var priority: ContactPriority = .normal
+    @State private var tags: [String] = []
 
     private var isEditing: Bool {
         contact != nil
@@ -29,6 +32,9 @@ struct AddEditContactView: View {
             _phone = State(initialValue: contact.phone ?? "")
             _email = State(initialValue: contact.email ?? "")
             _notes = State(initialValue: contact.notes ?? "")
+            _contactType = State(initialValue: contact.contactTypeEnum)
+            _priority = State(initialValue: contact.priorityEnum)
+            _tags = State(initialValue: contact.tags)
         }
     }
 
@@ -49,6 +55,66 @@ struct AddEditContactView: View {
                         .textInputAutocapitalization(.never)
                 } header: {
                     Text("Contact Information")
+                }
+
+                Section {
+                    // Contact Type Picker
+                    Picker("Type", selection: $contactType) {
+                        ForEach(ContactType.allCases, id: \.self) { type in
+                            HStack {
+                                Image(systemName: type.icon)
+                                Text(type.rawValue)
+                            }
+                            .tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    // Priority Picker
+                    Picker("Priority", selection: $priority) {
+                        ForEach(ContactPriority.allCases, id: \.self) { priority in
+                            Text(priority.rawValue)
+                                .tag(priority)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Classification")
+                } footer: {
+                    Text("Categorize this contact for better organization")
+                }
+
+                Section {
+                    // Tags display (read-only for now, add button for future)
+                    if !tags.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: DesignSystem.Spacing.xs) {
+                                ForEach(tags, id: \.self) { tag in
+                                    TagPill(tag: tag)
+                                }
+                            }
+                        }
+                    } else {
+                        Text("No tags")
+                            .font(DesignSystem.Typography.caption)
+                            .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    }
+
+                    // Add Tag button (placeholder for future functionality)
+                    Button {
+                        // Future: Show add tag sheet
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Add Tag")
+                        }
+                        .font(DesignSystem.Typography.body)
+                        .foregroundStyle(DesignSystem.Colors.electricBlue)
+                    }
+                } header: {
+                    Text("Tags")
+                } footer: {
+                    Text("Add tags to organize and filter contacts")
                 }
 
                 Section {
@@ -93,7 +159,12 @@ struct AddEditContactView: View {
             email: trimmedEmail.isEmpty ? nil : trimmedEmail,
             notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
             createdAt: contact?.createdAt ?? Date(),
-            lastContactedAt: contact?.lastContactedAt
+            lastContactedAt: contact?.lastContactedAt,
+            contactType: contactType,
+            priority: priority,
+            tags: tags,
+            totalRevenue: contact?.totalRevenue ?? 0,
+            wantListItems: contact?.wantListItems ?? []
         )
 
         onSave(newContact)

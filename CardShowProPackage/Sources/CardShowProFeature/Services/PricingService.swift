@@ -1,210 +1,200 @@
+import SwiftData
 import Foundation
+import OSLog
 
-/// Service for fetching Pokemon card pricing data
+/// Main pricing service that orchestrates three-tier caching:
+/// 1. Memory cache (NSCache) - fastest
+/// 2. SwiftData (PriceCacheRepository) - persistent
+/// 3. API (PokemonTCGService) - network
 @MainActor
-@Observable
-final class PricingService {
-    static let shared = PricingService()
+public final class PricingService {
+    private let repository: PriceCacheRepository
+    private let pokemonAPI: PokemonTCGService
+    private let memoryCache = NSCache<NSString, CachedPrice>()
+    private let logger = Logger(subsystem: "com.cardshowpro.app", category: "PricingService")
 
-    private let networkService = NetworkService.shared
-    private let baseURL = "https://api.pokemontcg.io/v2"
+    // Configuration
+    private let staleTTL: TimeInterval = 86400 // 24 hours
 
-    // MARK: - Configuration
-    // PokemonTCG.io API key (optional - higher rate limits with key)
-    private let apiKey = "" // Add your PokemonTCG.io API key here (optional)
+    public init(modelContext: ModelContext) {
+        self.repository = PriceCacheRepository(modelContext: modelContext)
+        self.pokemonAPI = .shared
 
-    // MARK: - State
-    var isLoading = false
-    var lastError: PricingError?
-
-    private init() {}
+        // Configure memory cache limits
+        memoryCache.countLimit = 200 // Store up to 200 cards in memory
+        memoryCache.totalCostLimit = 10 * 1024 * 1024 // ~10MB memory limit
+    }
 
     // MARK: - Public API
 
-    /// Fetch pricing for a Pokemon card
-    func fetchPricing(cardName: String, setName: String, cardNumber: String) async throws -> CardPricing {
-        isLoading = true
-        defer { isLoading = false }
+    /// Get price for a card, checking all cache tiers
+    /// - Parameter cardID: Unique card identifier (e.g., "base1-4")
+    /// - Returns: CachedPrice if found in any tier, nil if not cached
+    public func getPrice(cardID: String, allowStale: Bool = false) throws -> CachedPrice? {
+        // Tier 1: Check memory cache
+        if let cached = memoryCache.object(forKey: cardID as NSString) {
+            logger.debug("Memory cache hit for card: \(cardID)")
 
-        // Build search query
-        let query = buildSearchQuery(cardName: cardName, setName: setName, cardNumber: cardNumber)
-
-        guard let url = URL(string: "\(baseURL)/cards?\(query)") else {
-            throw NetworkError.invalidURL
-        }
-
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
-
-        do {
-            let response: PokemonTCGResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
-
-            guard let pricing = response.toCardPricing() else {
-                // If no pricing available, return mock data for development
-                return try await mockPricing(cardName: cardName)
+            // Return if fresh enough
+            if allowStale || !cached.isStale {
+                return cached
             }
 
-            return pricing
-        } catch let error as NetworkError {
-            throw PricingError.networkError(error)
-        } catch {
-            throw PricingError.apiError(error.localizedDescription)
-        }
-    }
-
-    /// Fetch pricing by card ID (more accurate)
-    func fetchPricingByID(_ cardID: String) async throws -> CardPricing {
-        isLoading = true
-        defer { isLoading = false }
-
-        guard let url = URL(string: "\(baseURL)/cards/\(cardID)") else {
-            throw NetworkError.invalidURL
+            logger.debug("Memory cached price is stale for card: \(cardID)")
         }
 
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
+        // Tier 2: Check SwiftData
+        if let cached = try repository.getPrice(cardID: cardID) {
+            logger.debug("SwiftData cache hit for card: \(cardID)")
 
-        do {
-            let response: PokemonTCGResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
+            // Store in memory for faster future access
+            memoryCache.setObject(cached, forKey: cardID as NSString)
 
-            guard let pricing = response.toCardPricing() else {
-                throw PricingError.noPricingAvailable
+            if allowStale || !cached.isStale {
+                return cached
             }
 
-            return pricing
-        } catch let error as NetworkError {
-            throw PricingError.networkError(error)
-        } catch {
-            throw PricingError.apiError(error.localizedDescription)
+            logger.debug("SwiftData cached price is stale for card: \(cardID)")
         }
+
+        // Not found in any cache
+        logger.debug("Cache miss for card: \(cardID)")
+        return nil
     }
 
-    /// Search for cards matching criteria
-    func searchCards(name: String? = nil, setName: String? = nil, number: String? = nil) async throws -> [PokemonTCGResponse.PokemonTCGCard] {
-        var queryParts: [String] = []
+    /// Fetch price from API and update all cache tiers
+    /// - Parameter cardID: Unique card identifier
+    /// - Returns: Freshly fetched CachedPrice
+    public func fetchPrice(cardID: String) async throws -> CachedPrice {
+        logger.info("Fetching price from API for card: \(cardID)")
 
-        if let name = name, !name.isEmpty {
-            queryParts.append("name:\"\(name)\"")
+        // Fetch from PokemonTCG API
+        let (cardData, _) = try await pokemonAPI.getCardByID(cardID)
+
+        // Convert to CachedPrice model
+        let cachedPrice = try convertToCachedPrice(cardData)
+
+        // Save to persistent storage
+        try repository.savePrice(cachedPrice)
+
+        // Update memory cache
+        memoryCache.setObject(cachedPrice, forKey: cardID as NSString)
+
+        logger.info("Successfully cached price for card: \(cardID)")
+        return cachedPrice
+    }
+
+    /// Get price with automatic fallback to API if stale/missing
+    /// - Parameter cardID: Unique card identifier
+    /// - Returns: CachedPrice (from cache or API)
+    public func getPriceOrFetch(cardID: String) async throws -> CachedPrice {
+        // Try cache first
+        if let cached = try getPrice(cardID: cardID, allowStale: false) {
+            return cached
         }
 
-        if let setName = setName, !setName.isEmpty {
-            queryParts.append("set.name:\"\(setName)\"")
-        }
+        // Cache miss or stale - fetch from API
+        return try await fetchPrice(cardID: cardID)
+    }
 
-        if let number = number, !number.isEmpty {
-            queryParts.append("number:\(number)")
-        }
+    /// Search for cards by name (cache-only)
+    /// - Parameter query: Search query string
+    /// - Returns: Array of cached prices matching query
+    public func searchCachedPrices(query: String) throws -> [CachedPrice] {
+        return try repository.searchPrices(query: query)
+    }
 
-        let query = "q=" + queryParts.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+    /// Search for cards by name (API)
+    /// - Parameter query: Search query string
+    /// - Returns: Array of card matches from API
+    public func searchCardsFromAPI(name: String, number: String? = nil) async throws -> [CardMatch] {
+        return try await pokemonAPI.searchCard(name: name, number: number)
+    }
 
-        guard let url = URL(string: "\(baseURL)/cards?\(query)") else {
-            throw NetworkError.invalidURL
-        }
+    /// Manually refresh a cached price
+    /// - Parameter cardID: Unique card identifier
+    /// - Returns: Updated CachedPrice
+    public func refreshPrice(cardID: String) async throws -> CachedPrice {
+        logger.info("Manual refresh requested for card: \(cardID)")
+        return try await fetchPrice(cardID: cardID)
+    }
 
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
+    /// Get cache statistics
+    public func getCacheStats() throws -> CacheStatistics {
+        return try repository.getCacheStats()
+    }
 
-        let response: PokemonTCGResponse = try await networkService.get(
-            url: url,
-            headers: headers
+    /// Clear all cached prices (both memory and persistent)
+    public func clearAllCaches() throws {
+        memoryCache.removeAllObjects()
+        try repository.clearAll()
+        logger.info("Cleared all pricing caches")
+    }
+
+    /// Clear only memory cache (keeps SwiftData intact)
+    public func clearMemoryCache() {
+        memoryCache.removeAllObjects()
+        logger.info("Cleared memory cache")
+    }
+
+    /// Remove stale prices older than specified days
+    public func clearStalePrices(olderThanDays days: Int = 30) throws {
+        try repository.deleteStalePrices(olderThanDays: days)
+        logger.info("Cleared stale prices older than \(days) days")
+    }
+
+    // MARK: - Private Helpers
+
+    /// Convert PokemonTCG API response to CachedPrice model
+    private func convertToCachedPrice(_ cardData: PokemonTCGResponse.PokemonTCGCard) throws -> CachedPrice {
+        let cachedPrice = CachedPrice(
+            cardID: cardData.id,
+            cardName: cardData.name,
+            setName: cardData.set.name,
+            setID: cardData.set.id,
+            cardNumber: cardData.number,
+            marketPrice: cardData.tcgplayer?.prices?.normal?.market ?? cardData.tcgplayer?.prices?.holofoil?.market,
+            lowPrice: cardData.tcgplayer?.prices?.normal?.low ?? cardData.tcgplayer?.prices?.holofoil?.low,
+            midPrice: cardData.tcgplayer?.prices?.normal?.mid ?? cardData.tcgplayer?.prices?.holofoil?.mid,
+            highPrice: cardData.tcgplayer?.prices?.normal?.high ?? cardData.tcgplayer?.prices?.holofoil?.high,
+            imageURLSmall: cardData.images.small,
+            imageURLLarge: cardData.images.large,
+            source: "PokemonTCG.io"
         )
 
-        return response.data
-    }
+        // Store variant pricing as JSON if available
+        if let tcgplayer = cardData.tcgplayer?.prices {
+            let variantPricing = VariantPricing(
+                normal: tcgplayer.normal.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market, directLow: $0.directLow) },
+                holofoil: tcgplayer.holofoil.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market, directLow: $0.directLow) },
+                reverseHolofoil: tcgplayer.reverseHolofoil.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market, directLow: $0.directLow) },
+                firstEdition: tcgplayer.firstEditionHolofoil.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market, directLow: $0.directLow) },
+                unlimited: tcgplayer.unlimitedHolofoil.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market, directLow: $0.directLow) }
+            )
 
-    // MARK: - Helper Methods
-
-    private func buildSearchQuery(cardName: String, setName: String, cardNumber: String) -> String {
-        var parts: [String] = []
-
-        // Clean up card name (remove VMAX, V, ex, etc. for better matching)
-        let cleanName = cardName
-            .replacingOccurrences(of: " VMAX", with: "")
-            .replacingOccurrences(of: " VSTAR", with: "")
-            .replacingOccurrences(of: " V", with: "")
-            .replacingOccurrences(of: " ex", with: "")
-            .trimmingCharacters(in: .whitespaces)
-
-        parts.append("name:\"\(cleanName)\"")
-
-        // Add set name if available
-        if !setName.isEmpty && setName != "Unknown Set" {
-            parts.append("set.name:\"\(setName)\"")
+            let encoder = JSONEncoder()
+            cachedPrice.variantPricesJSON = try encoder.encode(variantPricing)
         }
 
-        // Add card number if available
-        if !cardNumber.isEmpty && cardNumber != "???" {
-            // Remove leading zeros and hash symbol
-            let cleanNumber = cardNumber.replacingOccurrences(of: "#", with: "").trimmingCharacters(in: CharacterSet(charactersIn: "0"))
-            if !cleanNumber.isEmpty {
-                parts.append("number:\(cleanNumber)")
-            }
-        }
-
-        let query = parts.joined(separator: " ")
-        return "q=" + (query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)
-    }
-
-    // MARK: - Mock Pricing (for development/fallback)
-
-    private func mockPricing(cardName: String) async throws -> CardPricing {
-        // Simulate API delay
-        try await Task.sleep(for: .milliseconds(400))
-
-        // Generate realistic mock pricing based on card name
-        let basePrice: Double
-
-        if cardName.contains("VMAX") || cardName.contains("VSTAR") {
-            basePrice = Double.random(in: 15...80)
-        } else if cardName.contains(" V") || cardName.contains(" ex") {
-            basePrice = Double.random(in: 5...40)
-        } else if cardName.contains("Charizard") || cardName.contains("Pikachu") {
-            basePrice = Double.random(in: 10...150)
-        } else {
-            basePrice = Double.random(in: 1...25)
-        }
-
-        let variance = basePrice * 0.3
-        return CardPricing(
-            marketPrice: basePrice,
-            lowPrice: basePrice - variance,
-            midPrice: basePrice,
-            highPrice: basePrice + variance,
-            directLowPrice: basePrice - (variance * 0.5),
-            source: .pokemonTCG,
-            lastUpdated: Date()
-        )
+        return cachedPrice
     }
 }
 
-// MARK: - Configuration Helper
+// MARK: - Cache Strategy Info
 
-extension PricingService {
-    /// Check if API key is configured
-    var hasAPIKey: Bool {
-        !apiKey.isEmpty
+/// Helper struct for cache strategy debugging
+public struct CacheStrategy: Sendable {
+    public enum Tier: String, Sendable {
+        case memory = "Memory (NSCache)"
+        case swiftData = "SwiftData (Persistent)"
+        case api = "API (Network)"
     }
 
-    /// Get rate limit information
-    var rateLimitInfo: String {
-        if hasAPIKey {
-            return "API Key configured - higher rate limits"
-        } else {
-            return "No API key - 1000 requests/day limit"
-        }
+    public let tier: Tier
+    public let latencyMS: Int
+
+    public init(tier: Tier, latencyMS: Int) {
+        self.tier = tier
+        self.latencyMS = latencyMS
     }
 }

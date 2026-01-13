@@ -1,7 +1,7 @@
 import Foundation
 
 /// Card condition with corresponding price multipliers
-enum CardCondition: String, CaseIterable, Sendable {
+public enum CardCondition: String, CaseIterable, Sendable {
     case mint = "Mint"
     case nearMint = "Near Mint"
     case excellent = "Excellent"

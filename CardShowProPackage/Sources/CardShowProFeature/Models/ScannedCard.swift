@@ -10,7 +10,7 @@ struct ScannedCard: Identifiable, Sendable {
     var cardNumber: String
     var setName: String
     var game: CardGame
-    var estimatedValue: Double
+    var marketValue: Double
     var confidence: Double // 0.0 to 1.0 for AI confidence
 
     init(
@@ -21,7 +21,7 @@ struct ScannedCard: Identifiable, Sendable {
         cardNumber: String = "",
         setName: String = "",
         game: CardGame = .pokemon,
-        estimatedValue: Double = 0.0,
+        marketValue: Double = 0.0,
         confidence: Double = 0.0
     ) {
         self.id = id
@@ -31,7 +31,7 @@ struct ScannedCard: Identifiable, Sendable {
         self.cardNumber = cardNumber
         self.setName = setName
         self.game = game
-        self.estimatedValue = estimatedValue
+        self.marketValue = marketValue
         self.confidence = confidence
     }
 }
@@ -44,7 +44,7 @@ final class ScanSession {
     var isProcessing: Bool = false
 
     var totalValue: Double {
-        scannedCards.reduce(0) { $0 + $1.estimatedValue }
+        scannedCards.reduce(0) { $0 + $1.marketValue }
     }
 
     var cardCount: Int {

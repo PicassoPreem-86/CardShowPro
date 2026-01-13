@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftData
 
-struct CardListView: View {
-    @Query(sort: \InventoryCard.timestamp, order: .reverse) private var inventoryCards: [InventoryCard]
+public struct CardListView: View {
+    @Query(sort: \InventoryCard.acquiredDate, order: .reverse) private var inventoryCards: [InventoryCard]
     @Environment(\.modelContext) private var modelContext
     @State private var searchText = ""
     @State private var selectedCategory: CardCategory = .allProduct
@@ -23,9 +23,9 @@ struct CardListView: View {
             return .graded
         } else if card.cardName.contains("Box") || card.cardName.contains("Pack") {
             return .sealed
-        } else if card.estimatedValue > 200 {
+        } else if card.marketValue > 200 {
             return .rawSingles
-        } else if card.estimatedValue < 50 {
+        } else if card.marketValue < 50 {
             return .misc
         } else {
             return .rawSingles
@@ -53,7 +53,7 @@ struct CardListView: View {
     }
 
     var totalValue: Double {
-        filteredCards.reduce(0) { $0 + $1.estimatedValue }
+        filteredCards.reduce(0) { $0 + $1.marketValue }
     }
 
     var emptyStateMessage: String {
@@ -64,7 +64,7 @@ struct CardListView: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         NavigationStack {
             ZStack {
                 // Nebula background layer
@@ -509,7 +509,7 @@ struct InventoryCardRow: View {
 
             // Value
             VStack(alignment: .trailing, spacing: 4) {
-                Text("$\(String(format: "%.2f", card.estimatedValue))")
+                Text("$\(String(format: "%.2f", card.marketValue))")
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundStyle(.cyan)
@@ -588,7 +588,7 @@ struct InventoryCardGridItem: View {
                     .lineLimit(1)
 
                 HStack {
-                    Text("$\(String(format: "%.2f", card.estimatedValue))")
+                    Text("$\(String(format: "%.2f", card.marketValue))")
                         .font(.headline)
                         .fontWeight(.bold)
                         .foregroundStyle(.cyan)

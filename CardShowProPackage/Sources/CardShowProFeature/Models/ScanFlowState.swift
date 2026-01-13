@@ -71,13 +71,22 @@ final class ScanFlowState {
 }
 
 /// Represents a card match from search (includes set info)
-struct CardMatch: Identifiable, Sendable {
-    let id: String  // Card ID
-    let cardName: String
-    let setName: String
-    let setID: String
-    let cardNumber: String
-    let imageURL: URL?
+public struct CardMatch: Identifiable, Sendable {
+    public let id: String  // Card ID
+    public let cardName: String
+    public let setName: String
+    public let setID: String
+    public let cardNumber: String
+    public let imageURL: URL?
+
+    public init(id: String, cardName: String, setName: String, setID: String, cardNumber: String, imageURL: URL?) {
+        self.id = id
+        self.cardName = cardName
+        self.setName = setName
+        self.setID = setID
+        self.cardNumber = cardNumber
+        self.imageURL = imageURL
+    }
 }
 
 /// Represents a Pokemon card set

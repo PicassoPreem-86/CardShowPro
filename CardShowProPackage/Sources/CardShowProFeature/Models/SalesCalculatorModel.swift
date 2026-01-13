@@ -1,6 +1,10 @@
 import Foundation
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 enum ProfitMode: Hashable, Sendable {
     case fixedAmount(Decimal)
     case percentage(Double)
@@ -88,6 +92,8 @@ final class SalesCalculatorModel {
     }
 
     func copyListPrice() {
+        #if os(iOS)
         UIPasteboard.general.string = calculationResult.listPrice.asCurrency
+        #endif
     }
 }

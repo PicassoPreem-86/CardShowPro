@@ -15,7 +15,7 @@ struct CardConfirmationView: View {
     @State private var cardName: String
     @State private var setName: String
     @State private var cardNumber: String
-    @State private var estimatedValue: Double
+    @State private var marketValue: Double
 
     init(
         cardImage: UIImage,
@@ -36,7 +36,7 @@ struct CardConfirmationView: View {
         _cardName = State(initialValue: recognitionResult.cardName)
         _setName = State(initialValue: recognitionResult.setName)
         _cardNumber = State(initialValue: recognitionResult.cardNumber)
-        _estimatedValue = State(initialValue: pricing?.estimatedValue ?? 0)
+        _marketValue = State(initialValue: pricing?.marketValue ?? 0)
     }
 
     var body: some View {
@@ -410,7 +410,7 @@ struct CardConfirmationView: View {
                     ConfirmationDetailRow(label: "Estimated Value", icon: "dollarsign.circle") {
                         HStack {
                             Text("$")
-                            TextField("0.00", value: $estimatedValue, format: .number)
+                            TextField("0.00", value: $marketValue, format: .number)
                                 .keyboardType(.decimalPad)
                                 .textFieldStyle(.roundedBorder)
                         }
@@ -478,7 +478,7 @@ struct CardConfirmationView: View {
 
         // Create updated pricing if manually edited
         let updatedPricing = pricing ?? CardPricing(
-            marketPrice: estimatedValue,
+            marketPrice: marketValue,
             lowPrice: nil,
             midPrice: nil,
             highPrice: nil,

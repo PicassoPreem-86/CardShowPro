@@ -11,7 +11,7 @@ struct CardPricing: Codable, Sendable {
     let lastUpdated: Date
 
     /// Best estimate for card value
-    var estimatedValue: Double {
+    var marketValue: Double {
         marketPrice ?? midPrice ?? ((lowPrice ?? 0) + (highPrice ?? 0)) / 2
     }
 

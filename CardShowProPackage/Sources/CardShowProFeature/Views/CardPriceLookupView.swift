@@ -6,7 +6,16 @@ import SwiftUI
 struct CardPriceLookupView: View {
     @State private var lookupState = PriceLookupState()
     @State private var showMatchSelection = false
+    @State private var showCopySuccess = false
+    @State private var autocompleteTask: Task<Void, Never>?
+    @State private var dismissToastTask: Task<Void, Never>?
+    @FocusState private var focusedField: Field?
     private let pokemonService = PokemonTCGService.shared
+
+    enum Field {
+        case cardName
+        case cardNumber
+    }
 
     var body: some View {
         NavigationStack {
@@ -43,8 +52,38 @@ struct CardPriceLookupView: View {
             .navigationTitle("Price Lookup")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                    .foregroundStyle(DesignSystem.Colors.thunderYellow)
+                }
+            }
+            .overlay(alignment: .top) {
+                if showCopySuccess {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(DesignSystem.Colors.success)
+                        Text("Prices copied to clipboard")
+                            .font(DesignSystem.Typography.body)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    }
+                    .padding(DesignSystem.Spacing.md)
+                    .background(DesignSystem.Colors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                    .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+                    .padding(.top, 60)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
             .sheet(isPresented: $showMatchSelection) {
                 matchSelectionSheet
+            }
+            .onDisappear {
+                autocompleteTask?.cancel()
+                dismissToastTask?.cancel()
             }
         }
     }
@@ -56,6 +95,7 @@ struct CardPriceLookupView: View {
             Text("Card Price Lookup")
                 .font(DesignSystem.Typography.heading2)
                 .foregroundStyle(DesignSystem.Colors.textPrimary)
+                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
 
             Text("Look up current TCGPlayer prices without adding to inventory")
                 .font(DesignSystem.Typography.body)
@@ -71,11 +111,8 @@ struct CardPriceLookupView: View {
             // Card Name Input
             cardNameInput
 
-            // Card Number Input (Split)
+            // Card Number Input (Consolidated)
             cardNumberInput
-
-            // Variant Input
-            variantInput
         }
     }
 
@@ -89,13 +126,21 @@ struct CardPriceLookupView: View {
                 .font(DesignSystem.Typography.body)
                 .foregroundStyle(DesignSystem.Colors.textPrimary)
                 .padding(DesignSystem.Spacing.sm)
-                .background(DesignSystem.Colors.backgroundTertiary)
+                .background(DesignSystem.Colors.backgroundTertiary.opacity(0.95))
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
-                        .stroke(DesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        .stroke(DesignSystem.Colors.borderSecondary, lineWidth: 1.5)
                 )
                 .autocorrectionDisabled()
+                .textContentType(.name)
+                .focused($focusedField, equals: .cardName)
+                .submitLabel(.search)
+                .onSubmit {
+                    focusedField = .cardNumber
+                }
+                .accessibilityLabel("Card Name")
+                .accessibilityHint("Enter the Pokemon card name to search")
         }
     }
 
@@ -105,63 +150,28 @@ struct CardPriceLookupView: View {
                 .font(DesignSystem.Typography.labelLarge)
                 .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                // First part (e.g., "25")
-                TextField("25", text: $lookupState.cardNumber)
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                    .padding(DesignSystem.Spacing.sm)
-                    .background(DesignSystem.Colors.backgroundTertiary)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
-                            .stroke(DesignSystem.Colors.borderPrimary, lineWidth: 1)
-                    )
-                    .keyboardType(.numberPad)
-                    .frame(maxWidth: .infinity)
-
-                // Separator
-                Text("/")
-                    .font(DesignSystem.Typography.heading3)
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
-
-                // Second part (e.g., "102")
-                TextField("102", text: $lookupState.totalCards)
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                    .padding(DesignSystem.Spacing.sm)
-                    .background(DesignSystem.Colors.backgroundTertiary)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
-                            .stroke(DesignSystem.Colors.borderPrimary, lineWidth: 1)
-                    )
-                    .keyboardType(.numberPad)
-                    .frame(maxWidth: .infinity)
-            }
-
-            Text("Optional: Enter card number and/or total cards in set")
-                .font(DesignSystem.Typography.caption)
-                .foregroundStyle(DesignSystem.Colors.textTertiary)
-        }
-    }
-
-    private var variantInput: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-            Text("Variant (Optional)")
-                .font(DesignSystem.Typography.labelLarge)
-                .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-            TextField("e.g., Holo, Reverse Holo, Full Art", text: $lookupState.variant)
+            TextField("25/102 or 25", text: $lookupState.cardNumber)
                 .font(DesignSystem.Typography.body)
                 .foregroundStyle(DesignSystem.Colors.textPrimary)
                 .padding(DesignSystem.Spacing.sm)
-                .background(DesignSystem.Colors.backgroundTertiary)
+                .background(DesignSystem.Colors.backgroundTertiary.opacity(0.95))
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
-                        .stroke(DesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        .stroke(DesignSystem.Colors.borderSecondary, lineWidth: 1.5)
                 )
+                .keyboardType(.default)
+                .focused($focusedField, equals: .cardNumber)
+                .submitLabel(.done)
+                .onSubmit {
+                    focusedField = nil
+                }
+                .accessibilityLabel("Card Number")
+                .accessibilityHint("Optional: Enter card number like 25 slash 102 or just 25")
+
+            Text("Optional: Enter card number (e.g., 25/102 or 25)")
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
         }
     }
 
@@ -182,6 +192,8 @@ struct CardPriceLookupView: View {
         .primaryButtonStyle()
         .disabled(!lookupState.canLookupPrice || lookupState.isLoading)
         .opacity(lookupState.canLookupPrice && !lookupState.isLoading ? 1.0 : 0.5)
+        .accessibilityLabel("Look up card price")
+        .accessibilityHint("Searches for current pricing from TCGPlayer")
     }
 
     // MARK: - Loading Section
@@ -526,6 +538,7 @@ struct CardPriceLookupView: View {
                 .frame(maxWidth: .infinity)
             }
             .secondaryButtonStyle()
+            .accessibilityLabel("Copy all prices to clipboard")
 
             Button {
                 lookupState.reset()
@@ -640,7 +653,7 @@ struct CardPriceLookupView: View {
                 // Search for matching cards
                 let matches = try await pokemonService.searchCard(
                     name: lookupState.cardName,
-                    number: lookupState.cardNumber.isEmpty ? nil : lookupState.cardNumber
+                    number: lookupState.parsedCardNumber
                 )
 
                 guard !matches.isEmpty else {
@@ -678,6 +691,9 @@ struct CardPriceLookupView: View {
         lookupState.selectedMatch = match
         showMatchSelection = false
 
+        // Cancel any existing pricing fetch
+        autocompleteTask?.cancel()
+
         Task {
             lookupState.isLoading = true
             do {
@@ -705,6 +721,18 @@ struct CardPriceLookupView: View {
 
         UIPasteboard.general.string = text
 
-        // TODO: Show success feedback (toast or alert)
+        // Show success feedback
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showCopySuccess = true
+        }
+
+        // Auto-dismiss after 2 seconds
+        dismissToastTask?.cancel()
+        dismissToastTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showCopySuccess = false
+            }
+        }
     }
 }

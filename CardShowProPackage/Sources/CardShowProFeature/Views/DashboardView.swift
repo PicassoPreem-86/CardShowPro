@@ -12,7 +12,7 @@ struct DashboardView: View {
 
     // Calculated stats from inventory
     private var totalValue: Double {
-        inventoryCards.reduce(0) { $0 + $1.estimatedValue }
+        inventoryCards.reduce(0) { $0 + $1.marketValue }
     }
 
     private var totalCount: Int {
@@ -20,7 +20,7 @@ struct DashboardView: View {
     }
 
     private var topCard: InventoryCard? {
-        inventoryCards.max(by: { $0.estimatedValue < $1.estimatedValue })
+        inventoryCards.max(by: { $0.marketValue < $1.marketValue })
     }
 
     var body: some View {

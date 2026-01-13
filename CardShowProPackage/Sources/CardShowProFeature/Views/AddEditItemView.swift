@@ -234,17 +234,17 @@ struct AddEditItemView: View {
         cardName = card.cardName
         setName = card.setName
         cardNumber = card.cardNumber
-        marketValue = String(format: "%.2f", card.estimatedValue)
+        marketValue = String(format: "%.2f", card.marketValue)
         selectedImage = card.image
 
         // Mock values - will be real fields later
-        purchasePrice = String(format: "%.2f", card.estimatedValue * 0.65)
+        purchasePrice = String(format: "%.2f", card.marketValue * 0.65)
         notes = "Card imported from scan"
 
         // Mock category based on confidence
         if card.confidence > 0.9 {
             selectedCategory = .graded
-        } else if card.estimatedValue > 200 {
+        } else if card.marketValue > 200 {
             selectedCategory = .rawSingles
         } else {
             selectedCategory = .rawSingles
@@ -265,7 +265,7 @@ struct AddEditItemView: View {
             existingCard.cardName = cardName.trimmingCharacters(in: .whitespaces)
             existingCard.setName = setName.trimmingCharacters(in: .whitespaces)
             existingCard.cardNumber = cardNumber.trimmingCharacters(in: .whitespaces)
-            existingCard.estimatedValue = marketVal
+            existingCard.marketValue = marketVal
             if let image = selectedImage {
                 existingCard.imageData = image.pngData()
             }
@@ -275,9 +275,9 @@ struct AddEditItemView: View {
                 cardName: cardName.trimmingCharacters(in: .whitespaces),
                 cardNumber: cardNumber.trimmingCharacters(in: .whitespaces),
                 setName: setName.trimmingCharacters(in: .whitespaces),
-                estimatedValue: marketVal,
-                confidence: 1.0, // Manual entry = 100% confidence
-                imageData: selectedImage?.pngData()
+                marketValue: marketVal,
+                imageData: selectedImage?.pngData(),
+                confidence: 1.0 // Manual entry = 100% confidence
             )
             modelContext.insert(newCard)
         }

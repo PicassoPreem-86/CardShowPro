@@ -10,14 +10,8 @@ final class PriceLookupState: Sendable {
     /// Pokemon card name (required)
     var cardName: String = ""
 
-    /// Card number - first part (e.g., "25" from "25/102")
+    /// Card number in "25/102" or "25" format
     var cardNumber: String = ""
-
-    /// Total cards in set - second part (e.g., "102" from "25/102") - optional
-    var totalCards: String = ""
-
-    /// Card variant (e.g., "Holo", "Reverse Holo", "Full Art") - free text
-    var variant: String = ""
 
     // MARK: - Pricing Data
 
@@ -43,8 +37,18 @@ final class PriceLookupState: Sendable {
     /// Available card matches from search
     var availableMatches: [CardMatch] = []
 
-    /// Recent search queries (limit to 5)
-    var recentSearches: [String] = []
+    /// Recent search queries (limit to 5) - persisted to UserDefaults
+    var recentSearches: [String] = [] {
+        didSet {
+            UserDefaults.standard.set(recentSearches, forKey: "recentCardSearches")
+        }
+    }
+
+    /// Autocomplete suggestions
+    var autocompleteSuggestions: [CardMatch] = []
+
+    /// Loading indicator for autocomplete
+    var isLoadingAutocomplete: Bool = false
 
     // MARK: - Computed Properties
 
@@ -53,17 +57,26 @@ final class PriceLookupState: Sendable {
         !cardName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// Format card number for display (e.g., "25/102" or just "25")
-    var formattedCardNumber: String {
-        let number = cardNumber.trimmingCharacters(in: .whitespaces)
-        let total = totalCards.trimmingCharacters(in: .whitespaces)
+    /// Parse card number from "25/102" or "25" format for API query
+    var parsedCardNumber: String? {
+        let trimmed = cardNumber.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
 
-        if !number.isEmpty && !total.isEmpty {
-            return "\(number)/\(total)"
-        } else if !number.isEmpty {
-            return number
-        } else {
-            return ""
+        // If format is "25/102", extract "25"
+        if let slashIndex = trimmed.firstIndex(of: "/") {
+            return String(trimmed[..<slashIndex]).trimmingCharacters(in: .whitespaces)
+        }
+
+        // Otherwise return as-is (e.g., "25")
+        return trimmed
+    }
+
+    // MARK: - Initialization
+
+    init() {
+        // Load recent searches from UserDefaults
+        if let saved = UserDefaults.standard.array(forKey: "recentCardSearches") as? [String] {
+            self.recentSearches = saved
         }
     }
 
@@ -73,8 +86,6 @@ final class PriceLookupState: Sendable {
     func reset() {
         cardName = ""
         cardNumber = ""
-        totalCards = ""
-        variant = ""
         tcgPlayerPrices = nil
         ebayLastSold = nil
         isLoading = false
@@ -103,5 +114,11 @@ final class PriceLookupState: Sendable {
     /// Clear error message
     func clearError() {
         errorMessage = nil
+    }
+
+    /// Clear autocomplete suggestions
+    func clearAutocomplete() {
+        autocompleteSuggestions = []
+        isLoadingAutocomplete = false
     }
 }

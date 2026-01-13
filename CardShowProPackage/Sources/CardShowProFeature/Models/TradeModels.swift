@@ -5,7 +5,7 @@ struct TradeCard: Identifiable, Equatable, Sendable {
     let id: UUID
     let name: String
     let setName: String?
-    let estimatedValue: Decimal
+    let marketValue: Decimal
     let imageURL: URL?
     let isFromInventory: Bool
 
@@ -13,14 +13,14 @@ struct TradeCard: Identifiable, Equatable, Sendable {
         id: UUID = UUID(),
         name: String,
         setName: String? = nil,
-        estimatedValue: Decimal,
+        marketValue: Decimal,
         imageURL: URL? = nil,
         isFromInventory: Bool
     ) {
         self.id = id
         self.name = name
         self.setName = setName
-        self.estimatedValue = estimatedValue
+        self.marketValue = marketValue
         self.imageURL = imageURL
         self.isFromInventory = isFromInventory
     }
@@ -42,8 +42,8 @@ struct TradeAnalysis: Equatable, Sendable {
 
     /// Calculate trade analysis from two card sets
     static func calculate(yourCards: [TradeCard], theirCards: [TradeCard]) -> TradeAnalysis {
-        let yourTotal = yourCards.reduce(Decimal.zero) { $0 + $1.estimatedValue }
-        let theirTotal = theirCards.reduce(Decimal.zero) { $0 + $1.estimatedValue }
+        let yourTotal = yourCards.reduce(Decimal.zero) { $0 + $1.marketValue }
+        let theirTotal = theirCards.reduce(Decimal.zero) { $0 + $1.marketValue }
         let difference = theirTotal - yourTotal
 
         let percentDiff: Double
@@ -81,14 +81,14 @@ extension TradeCard {
         TradeCard(
             name: "Charizard VMAX",
             setName: "Darkness Ablaze",
-            estimatedValue: 350.00,
+            marketValue: 350.00,
             imageURL: URL(string: "https://images.pokemontcg.io/swsh3/20_hires.png"),
             isFromInventory: true
         ),
         TradeCard(
             name: "Blastoise",
             setName: "Base Set",
-            estimatedValue: 100.00,
+            marketValue: 100.00,
             imageURL: nil,
             isFromInventory: true
         )
@@ -98,14 +98,14 @@ extension TradeCard {
         TradeCard(
             name: "Pikachu VMAX",
             setName: "Vivid Voltage",
-            estimatedValue: 280.00,
+            marketValue: 280.00,
             imageURL: URL(string: "https://images.pokemontcg.io/swsh4/188_hires.png"),
             isFromInventory: false
         ),
         TradeCard(
             name: "Mewtwo GX",
             setName: "Shining Legends",
-            estimatedValue: 200.00,
+            marketValue: 200.00,
             imageURL: nil,
             isFromInventory: false
         )

@@ -12,11 +12,11 @@ struct CardDetailView: View {
 
     // Mock data for demo - will come from card in future
     private var purchasePrice: Double {
-        card.estimatedValue * 0.65 // Mock: 65% of market value
+        card.marketValue * 0.65 // Mock: 65% of market value
     }
 
     private var profit: Double {
-        card.estimatedValue - purchasePrice
+        card.marketValue - purchasePrice
     }
 
     private var roi: Double {
@@ -27,7 +27,7 @@ struct CardDetailView: View {
         // Mock category based on confidence - will be real field later
         if card.confidence > 0.9 {
             return "Graded"
-        } else if card.estimatedValue > 200 {
+        } else if card.marketValue > 200 {
             return "Raw Singles"
         } else if card.cardName.contains("Box") || card.cardName.contains("Pack") {
             return "Sealed"
@@ -162,7 +162,7 @@ struct CardDetailView: View {
                     Text("Market Value")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text("$\(String(format: "%.2f", card.estimatedValue))")
+                    Text("$\(String(format: "%.2f", card.marketValue))")
                         .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(.cyan)
                 }
@@ -265,7 +265,7 @@ struct CardDetailView: View {
                     icon: "calendar",
                     iconColor: .orange,
                     label: "Date Added",
-                    value: formatDate(card.timestamp)
+                    value: formatDate(card.acquiredDate)
                 )
 
                 Divider()
@@ -322,7 +322,7 @@ struct CardDetailView: View {
                     .fontWeight(.medium)
                     .foregroundStyle(.white)
 
-                Text("Card added via scanning. Market data accurate as of \(formatDate(card.timestamp)).")
+                Text("Card added via scanning. Market data accurate as of \(formatDate(card.acquiredDate)).")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineSpacing(4)

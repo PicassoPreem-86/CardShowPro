@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "CardShowProFeature",
-    platforms: [.iOS(.v17)],
+    platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
@@ -13,11 +13,28 @@ let package = Package(
             targets: ["CardShowProFeature"]
         ),
     ],
+    dependencies: [
+        // Supabase Swift SDK for backend and authentication
+        .package(
+            url: "https://github.com/supabase/supabase-swift",
+            exact: "2.5.1"
+        ),
+
+        // RevenueCat for subscription management
+        .package(
+            url: "https://github.com/RevenueCat/purchases-ios",
+            exact: "4.43.2"
+        )
+    ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "CardShowProFeature",
+            dependencies: [
+                .product(name: "Supabase", package: "supabase-swift"),
+                .product(name: "RevenueCat", package: "purchases-ios")
+            ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency")
             ]

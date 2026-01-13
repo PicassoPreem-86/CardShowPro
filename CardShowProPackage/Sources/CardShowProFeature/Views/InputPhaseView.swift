@@ -125,7 +125,7 @@ private struct SelectedCardRow: View {
                     .foregroundStyle(DesignSystem.Colors.textSecondary)
                     .lineLimit(1)
 
-                Text("$\(String(format: "%.2f", card.estimatedValue))")
+                Text("$\(String(format: "%.2f", card.marketValue))")
                     .font(DesignSystem.Typography.labelLarge)
                     .foregroundStyle(DesignSystem.Colors.success)
             }
@@ -168,7 +168,7 @@ private struct SelectCardButton: View {
                             state.selectedCard = card
                         }
                     } label: {
-                        Label("\(card.cardName) - $\(String(format: "%.2f", card.estimatedValue))", systemImage: "photo")
+                        Label("\(card.cardName) - $\(String(format: "%.2f", card.marketValue))", systemImage: "photo")
                     }
                 }
             }
