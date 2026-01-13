@@ -11,10 +11,33 @@ public struct CardListView: View {
     @State private var isSelectionMode = false
     @State private var selectedCards: Set<InventoryCard.ID> = []
     @State private var showBulkDeleteAlert = false
+    @State private var sortOption: SortOption = .acquiredDate
+    @State private var profitFilter: ProfitFilter = .all
+    @State private var showSortSheet = false
+    @State private var showFilterSheet = false
 
     enum ViewMode {
         case list
         case grid
+    }
+
+    enum SortOption: String, CaseIterable {
+        case acquiredDate = "Date Added"
+        case cardName = "Name"
+        case marketValue = "Market Value"
+        case profit = "Profit"
+        case roi = "ROI %"
+        case purchaseCost = "Purchase Cost"
+    }
+
+    enum ProfitFilter: String, CaseIterable {
+        case all = "All Cards"
+        case profitable = "Profitable Only"
+        case unprofitable = "Unprofitable Only"
+        case noCost = "No Purchase Cost"
+        case highROI = "ROI > 100%"
+        case mediumROI = "ROI 50-100%"
+        case lowROI = "ROI < 50%"
     }
 
     // Mock category assignment - will be real field in model later
@@ -49,6 +72,40 @@ public struct CardListView: View {
             }
         }
 
+        // Apply profit filter
+        switch profitFilter {
+        case .all:
+            break
+        case .profitable:
+            cards = cards.filter { $0.profit > 0 }
+        case .unprofitable:
+            cards = cards.filter { $0.profit < 0 }
+        case .noCost:
+            cards = cards.filter { $0.purchaseCost == nil }
+        case .highROI:
+            cards = cards.filter { $0.roi > 100 }
+        case .mediumROI:
+            cards = cards.filter { $0.roi >= 50 && $0.roi <= 100 }
+        case .lowROI:
+            cards = cards.filter { $0.roi < 50 && $0.purchaseCost != nil }
+        }
+
+        // Apply sorting
+        switch sortOption {
+        case .acquiredDate:
+            cards.sort { $0.acquiredDate > $1.acquiredDate }
+        case .cardName:
+            cards.sort { $0.cardName.localizedCaseInsensitiveCompare($1.cardName) == .orderedAscending }
+        case .marketValue:
+            cards.sort { $0.marketValue > $1.marketValue }
+        case .profit:
+            cards.sort { $0.profit > $1.profit }
+        case .roi:
+            cards.sort { $0.roi > $1.roi }
+        case .purchaseCost:
+            cards.sort { ($0.purchaseCost ?? 0) > ($1.purchaseCost ?? 0) }
+        }
+
         return cards
     }
 
@@ -56,9 +113,27 @@ public struct CardListView: View {
         filteredCards.reduce(0) { $0 + $1.marketValue }
     }
 
+    var totalInvested: Double {
+        filteredCards.reduce(0) { $0 + ($1.purchaseCost ?? 0) }
+    }
+
+    var totalProfit: Double {
+        filteredCards.reduce(0) { $0 + $1.profit }
+    }
+
+    var averageROI: Double {
+        let cardsWithCost = filteredCards.filter { $0.purchaseCost != nil }
+        guard !cardsWithCost.isEmpty else { return 0 }
+        return cardsWithCost.reduce(0) { $0 + $1.roi } / Double(cardsWithCost.count)
+    }
+
     var emptyStateMessage: String {
-        if selectedCategory == .allProduct {
-            return "Start scanning or manually add cards to build your collection"
+        if profitFilter == .noCost {
+            return "No cards without purchase cost tracking"
+        } else if profitFilter != .all {
+            return "No cards match the selected profit filter"
+        } else if selectedCategory == .allProduct {
+            return "Start scanning or manually add cards to build your collection. Add purchase costs to track profit!"
         } else {
             return "No \(selectedCategory.rawValue.lowercased()) in your collection yet"
         }
@@ -129,8 +204,25 @@ public struct CardListView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 12) {
-                        // View Mode Toggle (hide in selection mode)
+                        // Sort and Filter (hide in selection mode)
                         if !isSelectionMode {
+                            // Sort Button
+                            Button {
+                                showSortSheet = true
+                            } label: {
+                                Image(systemName: "arrow.up.arrow.down")
+                                    .foregroundStyle(.cyan)
+                            }
+
+                            // Filter Button
+                            Button {
+                                showFilterSheet = true
+                            } label: {
+                                Image(systemName: profitFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                                    .foregroundStyle(.cyan)
+                            }
+
+                            // View Mode Toggle
                             Button {
                                 withAnimation {
                                     viewMode = viewMode == .list ? .grid : .list
@@ -154,6 +246,14 @@ public struct CardListView: View {
             }
             .sheet(isPresented: $showAddItemSheet) {
                 AddEditItemView(cardToEdit: nil)
+            }
+            .sheet(isPresented: $showSortSheet) {
+                SortOptionsSheet(selectedOption: $sortOption)
+                    .presentationDetents([.height(400)])
+            }
+            .sheet(isPresented: $showFilterSheet) {
+                FilterOptionsSheet(selectedFilter: $profitFilter)
+                    .presentationDetents([.height(450)])
             }
             .alert("Delete \(selectedCards.count) card(s)?", isPresented: $showBulkDeleteAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -247,33 +347,64 @@ public struct CardListView: View {
 
     // MARK: - Stats Header
     private var statsHeader: some View {
-        HStack(spacing: 24) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Total Cards")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("\(filteredCards.count)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.white)
+        VStack(spacing: 0) {
+            // Top Row: Cards and Value
+            HStack(spacing: 16) {
+                // Total Cards
+                InventoryStatBox(
+                    label: "Cards",
+                    value: "\(filteredCards.count)",
+                    color: .white
+                )
+
+                // Total Value
+                InventoryStatBox(
+                    label: "Value",
+                    value: "$\(String(format: "%.0f", totalValue))",
+                    color: DesignSystem.Colors.cyan
+                )
+
+                // Total Invested
+                InventoryStatBox(
+                    label: "Invested",
+                    value: "$\(String(format: "%.0f", totalInvested))",
+                    color: DesignSystem.Colors.goldAmber
+                )
             }
+            .padding(.horizontal)
+            .padding(.top, DesignSystem.Spacing.md)
 
             Divider()
-                .frame(height: 40)
+                .padding(.vertical, DesignSystem.Spacing.xs)
+                .padding(.horizontal)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Total Value")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("$\(String(format: "%.2f", totalValue))")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.cyan)
+            // Bottom Row: Profit Metrics
+            HStack(spacing: 16) {
+                // Total Profit
+                InventoryStatBox(
+                    label: "Profit",
+                    value: "$\(String(format: "%.0f", totalProfit))",
+                    color: totalProfit >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error
+                )
+
+                // Average ROI
+                InventoryStatBox(
+                    label: "Avg ROI",
+                    value: "\(String(format: "%.0f", averageROI))%",
+                    color: averageROI >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error
+                )
+
+                // Profit Margin
+                let profitMarginPercent = totalInvested > 0 ? (totalProfit / totalInvested * 100) : 0
+                InventoryStatBox(
+                    label: "Margin",
+                    value: "\(String(format: "%.0f", profitMarginPercent))%",
+                    color: profitMarginPercent >= 0 ? DesignSystem.Colors.electricBlue : DesignSystem.Colors.error
+                )
             }
-
-            Spacer()
+            .padding(.horizontal)
+            .padding(.bottom, DesignSystem.Spacing.md)
         }
-        .padding()
         .background(DesignSystem.Colors.cardBackground)
     }
 
@@ -507,21 +638,27 @@ struct InventoryCardRow: View {
                 }
             }
 
-            // Value
-            VStack(alignment: .trailing, spacing: 4) {
+            // Value and Profit Section
+            VStack(alignment: .trailing, spacing: 6) {
+                // Market Value
                 Text("$\(String(format: "%.2f", card.marketValue))")
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundStyle(.cyan)
 
-                // Confidence with color coding
-                HStack(spacing: 2) {
-                    Image(systemName: confidenceIcon(for: card.confidence))
+                // Profit Badge (if purchase cost exists)
+                if card.purchaseCost != nil {
+                    ProfitBadge(profit: card.profit, roi: card.roi)
+                } else {
+                    // No purchase cost indicator
+                    Text("No Cost")
                         .font(.caption2)
-                    Text("\(Int(card.confidence * 100))%")
-                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(DesignSystem.Colors.backgroundTertiary)
+                        .clipShape(Capsule())
                 }
-                .foregroundStyle(confidenceColor(for: card.confidence))
             }
         }
         .padding(.vertical, 4)
@@ -574,7 +711,7 @@ struct InventoryCardGridItem: View {
             }
 
             // Card Info
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(card.cardName)
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -588,20 +725,38 @@ struct InventoryCardGridItem: View {
                     .lineLimit(1)
 
                 HStack {
-                    Text("$\(String(format: "%.2f", card.marketValue))")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.cyan)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("$\(String(format: "%.2f", card.marketValue))")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.cyan)
+
+                        // Profit display
+                        if card.purchaseCost != nil {
+                            HStack(spacing: 4) {
+                                Image(systemName: card.profit >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                    .font(.caption2)
+                                Text("$\(String(format: "%.0f", abs(card.profit)))")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundStyle(card.profit >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error)
+                        }
+                    }
 
                     Spacer()
 
-                    HStack(spacing: 2) {
-                        Image(systemName: confidenceIcon(for: card.confidence))
-                            .font(.caption2)
-                        Text("\(Int(card.confidence * 100))%")
-                            .font(.caption2)
+                    if card.purchaseCost != nil {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(String(format: "%.0f", card.roi))%")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundStyle(card.roi >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error)
+                            Text("ROI")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .foregroundStyle(confidenceColor(for: card.confidence))
                 }
             }
         }
@@ -633,5 +788,168 @@ private func confidenceIcon(for confidence: Double) -> String {
     case 0.75..<0.9: return "checkmark.circle.fill"
     case 0.5..<0.75: return "exclamationmark.triangle.fill"
     default: return "xmark.octagon.fill"
+    }
+}
+
+// MARK: - Profit Badge Component
+struct ProfitBadge: View {
+    let profit: Double
+    let roi: Double
+
+    private var profitColor: Color {
+        if profit > 0 {
+            return DesignSystem.Colors.success
+        } else if profit < 0 {
+            return DesignSystem.Colors.error
+        } else {
+            return DesignSystem.Colors.textSecondary
+        }
+    }
+
+    private var profitIcon: String {
+        profit >= 0 ? "arrow.up.right" : "arrow.down.right"
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: profitIcon)
+                .font(.caption2)
+            Text("$\(String(format: "%.0f", abs(profit)))")
+                .font(.caption)
+                .fontWeight(.semibold)
+            Text("(\(String(format: "%.0f", roi))%)")
+                .font(.caption2)
+        }
+        .foregroundStyle(profitColor)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(profitColor.opacity(0.15))
+        .clipShape(Capsule())
+    }
+}
+
+// MARK: - Inventory Stat Box Component
+struct InventoryStatBox: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+            Text(value)
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Sort Options Sheet
+struct SortOptionsSheet: View {
+    @Binding var selectedOption: CardListView.SortOption
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(CardListView.SortOption.allCases, id: \.self) { option in
+                    Button {
+                        selectedOption = option
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(option.rawValue)
+                                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            Spacer()
+                            if selectedOption == option {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(DesignSystem.Colors.cyan)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Sort By")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundStyle(DesignSystem.Colors.cyan)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Filter Options Sheet
+struct FilterOptionsSheet: View {
+    @Binding var selectedFilter: CardListView.ProfitFilter
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(CardListView.ProfitFilter.allCases, id: \.self) { filter in
+                    Button {
+                        selectedFilter = filter
+                        dismiss()
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(filter.rawValue)
+                                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                                if let description = filterDescription(for: filter) {
+                                    Text(description)
+                                        .font(.caption)
+                                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                                }
+                            }
+                            Spacer()
+                            if selectedFilter == filter {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(DesignSystem.Colors.cyan)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Filter By")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundStyle(DesignSystem.Colors.cyan)
+                }
+            }
+        }
+    }
+
+    private func filterDescription(for filter: CardListView.ProfitFilter) -> String? {
+        switch filter {
+        case .all:
+            return nil
+        case .profitable:
+            return "Cards with positive profit"
+        case .unprofitable:
+            return "Cards with negative profit"
+        case .noCost:
+            return "Cards without purchase cost"
+        case .highROI:
+            return "Return over 100%"
+        case .mediumROI:
+            return "Return 50-100%"
+        case .lowROI:
+            return "Return under 50%"
+        }
     }
 }
