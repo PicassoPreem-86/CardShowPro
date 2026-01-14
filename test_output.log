@@ -1,0 +1,4 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test  -workspace CardShowPro.xcworkspace  -scheme CardShowProUITests  -destination "platform=iOS Simulator,name=iPhone 16"  -resultBundlePath TestResults.xcresult 
+
+xcodebuild: error: Unknown build action ''.

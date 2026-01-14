@@ -77,6 +77,7 @@ struct ToolsView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("sales-calculator-button")
 
                         NavigationLink {
                             ListingGeneratorView()

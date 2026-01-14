@@ -37,12 +37,8 @@ final class PriceLookupState: Sendable {
     /// Available card matches from search
     var availableMatches: [CardMatch] = []
 
-    /// Recent search queries (limit to 5) - persisted to UserDefaults
-    var recentSearches: [String] = [] {
-        didSet {
-            UserDefaults.standard.set(recentSearches, forKey: "recentCardSearches")
-        }
-    }
+    /// Recent search queries (limit to 10) - persisted to UserDefaults
+    var recentSearches: [RecentSearch] = []
 
     /// Autocomplete suggestions
     var autocompleteSuggestions: [CardMatch] = []
@@ -50,7 +46,30 @@ final class PriceLookupState: Sendable {
     /// Loading indicator for autocomplete
     var isLoadingAutocomplete: Bool = false
 
+    // MARK: - Cache State
+
+    /// Whether the current result is from cache
+    var isFromCache: Bool = false
+
+    /// Age of cached data in hours (if from cache)
+    var cacheAgeHours: Int?
+
     // MARK: - Computed Properties
+
+    /// Cache age display string
+    var cacheAge: String {
+        guard let hours = cacheAgeHours else { return "" }
+        if hours < 1 {
+            return "Just updated"
+        } else if hours == 1 {
+            return "1 hour ago"
+        } else if hours < 24 {
+            return "\(hours) hours ago"
+        } else {
+            let days = hours / 24
+            return days == 1 ? "1 day ago" : "\(days) days ago"
+        }
+    }
 
     /// Check if lookup button should be enabled
     var canLookupPrice: Bool {
@@ -74,10 +93,7 @@ final class PriceLookupState: Sendable {
     // MARK: - Initialization
 
     init() {
-        // Load recent searches from UserDefaults
-        if let saved = UserDefaults.standard.array(forKey: "recentCardSearches") as? [String] {
-            self.recentSearches = saved
-        }
+        loadRecentSearches()
     }
 
     // MARK: - Methods
@@ -92,6 +108,8 @@ final class PriceLookupState: Sendable {
         errorMessage = nil
         selectedMatch = nil
         availableMatches = []
+        isFromCache = false
+        cacheAgeHours = nil
     }
 
     /// Add to recent searches
@@ -99,16 +117,42 @@ final class PriceLookupState: Sendable {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
 
-        // Remove if already exists
-        recentSearches.removeAll { $0 == trimmed }
+        // Remove if already exists (case-insensitive)
+        recentSearches.removeAll { $0.cardName.lowercased() == trimmed.lowercased() }
 
         // Add to front
-        recentSearches.insert(trimmed, at: 0)
+        let search = RecentSearch(cardName: trimmed, timestamp: Date())
+        recentSearches.insert(search, at: 0)
 
-        // Limit to 5
-        if recentSearches.count > 5 {
-            recentSearches = Array(recentSearches.prefix(5))
+        // Limit to 10
+        if recentSearches.count > 10 {
+            recentSearches = Array(recentSearches.prefix(10))
         }
+
+        // Persist to UserDefaults
+        saveRecentSearches()
+    }
+
+    /// Clear all recent searches
+    func clearRecentSearches() {
+        recentSearches.removeAll()
+        UserDefaults.standard.removeObject(forKey: "recentCardSearches")
+    }
+
+    /// Save recent searches to UserDefaults
+    private func saveRecentSearches() {
+        if let encoded = try? JSONEncoder().encode(recentSearches) {
+            UserDefaults.standard.set(encoded, forKey: "recentCardSearches")
+        }
+    }
+
+    /// Load recent searches from UserDefaults
+    func loadRecentSearches() {
+        guard let data = UserDefaults.standard.data(forKey: "recentCardSearches"),
+              let decoded = try? JSONDecoder().decode([RecentSearch].self, from: data) else {
+            return
+        }
+        recentSearches = decoded
     }
 
     /// Clear error message

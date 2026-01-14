@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 import SwiftData
 @testable import CardShowProFeature
 
@@ -119,7 +120,7 @@ struct PriceCacheTests {
         let updated = try repository.getPrice(cardID: "test-update")
 
         #expect(updated?.marketPrice == 75.00)
-        #expect(updated?.lastUpdated > originalTimestamp)
+        #expect(updated!.lastUpdated > originalTimestamp)
     }
 
     @Test("Delete cached price")

@@ -12,10 +12,10 @@ import AVFoundation
         cardNumber: "020",
         setName: "Darkness Ablaze",
         gameType: "pokemon",
-        estimatedValue: 350.00,
-        confidence: 0.95,
-        timestamp: testDate,
-        imageData: nil
+        marketValue: 350.00,
+        acquiredDate: testDate,
+        imageData: nil,
+        confidence: 0.95
     )
 
     // Verify all properties persist correctly
@@ -23,9 +23,9 @@ import AVFoundation
     #expect(card.cardNumber == "020")
     #expect(card.setName == "Darkness Ablaze")
     #expect(card.gameType == "pokemon")
-    #expect(card.estimatedValue == 350.00)
+    #expect(card.marketValue == 350.00)
     #expect(card.confidence == 0.95)
-    #expect(card.timestamp == testDate)
+    #expect(card.acquiredDate == testDate)
     #expect(card.imageData == nil)
 
     // Verify CardGame enum conversion works

@@ -8,65 +8,47 @@ struct SalesCalculatorView: View {
     @State private var showCopyToast = false
 
     enum Field: Hashable {
-        case cardCost
+        // Forward Mode fields
+        case salePrice
+        case itemCost
         case shippingCost
+        case suppliesCost
+
+        // Reverse Mode fields (legacy)
+        case cardCost
         case profitAmount
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: DesignSystem.Spacing.lg) {
-                // Platform Selector
-                PlatformSelectorCard(model: model)
+                // Mode Toggle
+                ModeToggle(mode: $model.mode)
 
-                // Input Section
-                VStack(spacing: DesignSystem.Spacing.md) {
-                    SectionHeader(title: "Costs")
-
-                    CurrencyTextField(
-                        title: "Card Cost",
-                        value: $model.cardCost,
-                        focusedField: $focusedField,
-                        field: .cardCost
-                    )
-
-                    CurrencyTextField(
-                        title: "Shipping Cost",
-                        value: $model.shippingCost,
-                        focusedField: $focusedField,
-                        field: .shippingCost
-                    )
+                // Mode-specific views
+                Group {
+                    switch model.mode {
+                    case .forward:
+                        ForwardModeView(model: model, focusedField: $focusedField)
+                    case .reverse:
+                        ReverseModeView(model: model, focusedField: $focusedField)
+                    }
                 }
-                .padding(DesignSystem.Spacing.md)
-                .background(DesignSystem.Colors.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
-                .shadow(
-                    color: DesignSystem.Shadows.level2.color,
-                    radius: DesignSystem.Shadows.level2.radius,
-                    x: DesignSystem.Shadows.level2.x,
-                    y: DesignSystem.Shadows.level2.y
-                )
-
-                // Profit Mode Section
-                ProfitModeSection(model: model, focusedField: $focusedField)
-
-                // Results Card
-                ResultsCard(model: model, showCopyToast: $showCopyToast)
-
-                // Fee Breakdown
-                FeeBreakdownSection(result: model.calculationResult)
+                .transition(.opacity)
             }
-            .padding(DesignSystem.Spacing.md)
+            .padding(.vertical, DesignSystem.Spacing.md)
         }
         .background(DesignSystem.Colors.backgroundPrimary)
         .navigationTitle("Sales Calculator")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("sales-calculator-view")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Reset") {
                     showResetAlert = true
                 }
                 .foregroundStyle(DesignSystem.Colors.textSecondary)
+                .accessibilityIdentifier("reset-button")
             }
 
             ToolbarItemGroup(placement: .keyboard) {

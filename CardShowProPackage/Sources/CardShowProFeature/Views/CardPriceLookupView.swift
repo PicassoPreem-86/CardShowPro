@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Card Price Lookup Tool
 /// Allows users to lookup card prices WITHOUT adding to inventory
@@ -7,10 +8,17 @@ struct CardPriceLookupView: View {
     @State private var lookupState = PriceLookupState()
     @State private var showMatchSelection = false
     @State private var showCopySuccess = false
+    @State private var showInventoryEntry = false
     @State private var autocompleteTask: Task<Void, Never>?
     @State private var dismissToastTask: Task<Void, Never>?
     @FocusState private var focusedField: Field?
     private let pokemonService = PokemonTCGService.shared
+
+    // Cache integration
+    @Environment(\.modelContext) private var modelContext
+    private var priceCache: PriceCacheRepository {
+        PriceCacheRepository(modelContext: modelContext)
+    }
 
     enum Field {
         case cardName
@@ -28,6 +36,22 @@ struct CardPriceLookupView: View {
                 VStack(spacing: DesignSystem.Spacing.lg) {
                     // Header
                     headerSection
+
+                    // Recent Searches (if available)
+                    if !lookupState.recentSearches.isEmpty {
+                        RecentSearchesView(
+                            searches: lookupState.recentSearches,
+                            onSelect: { cardName in
+                                lookupState.cardName = cardName
+                                focusedField = nil // Dismiss keyboard
+                                performLookup()
+                            },
+                            onClear: {
+                                lookupState.clearRecentSearches()
+                            }
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
 
                     // Input Sections
                     inputSections
@@ -80,6 +104,25 @@ struct CardPriceLookupView: View {
             }
             .sheet(isPresented: $showMatchSelection) {
                 matchSelectionSheet
+            }
+            .sheet(isPresented: $showInventoryEntry) {
+                if let entryData = prepareInventoryEntry() {
+                    NavigationStack {
+                        let scanState = ScanFlowState()
+                        let _ = {
+                            scanState.cardNumber = entryData.cardNumber
+                            scanState.fetchedPrice = entryData.price
+                            scanState.cardImageURL = entryData.imageURL
+                        }()
+
+                        CardEntryView(
+                            pokemonName: entryData.pokemonName,
+                            setName: entryData.setName,
+                            setID: entryData.setID,
+                            state: scanState
+                        )
+                    }
+                }
             }
             .onDisappear {
                 autocompleteTask?.cancel()
@@ -137,7 +180,11 @@ struct CardPriceLookupView: View {
                 .focused($focusedField, equals: .cardName)
                 .submitLabel(.search)
                 .onSubmit {
-                    focusedField = .cardNumber
+                    if !lookupState.cardName.isEmpty {
+                        performLookup() // Trigger lookup when user presses Search
+                    } else {
+                        focusedField = .cardNumber
+                    }
                 }
                 .accessibilityLabel("Card Name")
                 .accessibilityHint("Enter the Pokemon card name to search")
@@ -162,9 +209,13 @@ struct CardPriceLookupView: View {
                 )
                 .keyboardType(.default)
                 .focused($focusedField, equals: .cardNumber)
-                .submitLabel(.done)
+                .submitLabel(.search) // Changed from .done to .search
                 .onSubmit {
-                    focusedField = nil
+                    if lookupState.canLookupPrice {
+                        performLookup() // Trigger lookup if we have enough info
+                    } else {
+                        focusedField = nil
+                    }
                 }
                 .accessibilityLabel("Card Number")
                 .accessibilityHint("Optional: Enter card number like 25 slash 102 or just 25")
@@ -541,7 +592,25 @@ struct CardPriceLookupView: View {
             .accessibilityLabel("Copy all prices to clipboard")
 
             Button {
+                showInventoryEntry = true
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.xs) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(DesignSystem.Typography.labelLarge)
+                    Text("Add to Inventory")
+                        .font(DesignSystem.Typography.labelLarge)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .primaryButtonStyle()
+            .disabled(prepareInventoryEntry() == nil)
+            .opacity(prepareInventoryEntry() != nil ? 1.0 : 0.5)
+            .accessibilityLabel("Add card to inventory")
+            .accessibilityHint("Opens card entry form with pre-filled data from this lookup")
+
+            Button {
                 lookupState.reset()
+                focusedField = .cardName // Auto-focus keyboard for next lookup
             } label: {
                 Text("New Lookup")
                     .font(DesignSystem.Typography.labelLarge)
@@ -643,6 +712,23 @@ struct CardPriceLookupView: View {
     }
 
     // MARK: - Methods
+
+    private func prepareInventoryEntry() -> (pokemonName: String, setName: String, setID: String, cardNumber: String, price: Double, imageURL: URL?)? {
+        guard let match = lookupState.selectedMatch,
+              let pricing = lookupState.tcgPlayerPrices,
+              let normalVariant = pricing.availableVariants.first(where: { $0.name == "Normal" }),
+              let marketPrice = normalVariant.pricing.market
+        else { return nil }
+
+        return (
+            pokemonName: match.cardName,
+            setName: match.setName,
+            setID: match.setID,
+            cardNumber: match.cardNumber,
+            price: marketPrice,
+            imageURL: match.imageURL
+        )
+    }
 
     private func performLookup() {
         Task {
