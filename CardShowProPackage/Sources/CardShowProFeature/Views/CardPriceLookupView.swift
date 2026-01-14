@@ -298,6 +298,11 @@ struct CardPriceLookupView: View {
 
     private var pricingResultsSection: some View {
         VStack(spacing: DesignSystem.Spacing.lg) {
+            // Cache Indicator (if from cache)
+            if lookupState.isFromCache {
+                cacheIndicatorBadge
+            }
+
             // Large Card Image
             if let selectedMatch = lookupState.selectedMatch {
                 cardImageSection(selectedMatch)
@@ -319,6 +324,36 @@ struct CardPriceLookupView: View {
             // Bottom Actions
             bottomActionsSection
         }
+    }
+
+    // MARK: - Cache Indicator
+
+    private var cacheIndicatorBadge: some View {
+        HStack(spacing: DesignSystem.Spacing.xs) {
+            Image(systemName: "bolt.fill")
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.thunderYellow)
+
+            Text("Cached")
+                .font(DesignSystem.Typography.captionBold)
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
+
+            Text("•")
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textTertiary)
+
+            Text(lookupState.cacheAge)
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+        }
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, DesignSystem.Spacing.xs)
+        .background(DesignSystem.Colors.thunderYellow.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg)
+                .stroke(DesignSystem.Colors.thunderYellow.opacity(0.3), lineWidth: 1)
+        )
     }
 
     // MARK: - Card Image Section
@@ -732,11 +767,33 @@ struct CardPriceLookupView: View {
 
     private func performLookup() {
         Task {
+            let startTime = Date()
             lookupState.isLoading = true
             lookupState.errorMessage = nil
+            lookupState.isFromCache = false
+            lookupState.cacheAgeHours = nil
+
+            // Generate cache key for lookup
+            let cacheKey = generateCacheKey(lookupState.cardName, lookupState.parsedCardNumber)
 
             do {
-                // Search for matching cards
+                // CACHE FIRST: Check cache before API
+                if let cachedPrice = try? priceCache.getPrice(cardID: cacheKey) {
+                    // Check if fresh (< 24 hours)
+                    if !cachedPrice.isStale {
+                        let duration = Date().timeIntervalSince(startTime)
+                        print("✅ CACHE HIT: \(cacheKey) (age: \(cachedPrice.ageInHours)h, duration: \(String(format: "%.2f", duration))s)")
+                        displayCachedResult(cachedPrice)
+                        lookupState.isLoading = false
+                        return
+                    } else {
+                        print("⚠️ STALE CACHE: \(cacheKey) (age: \(cachedPrice.ageInHours)h) - Refreshing...")
+                    }
+                }
+
+                print("❌ CACHE MISS: \(cacheKey) - Fetching from API...")
+
+                // CACHE MISS OR STALE: Fetch from API
                 let matches = try await pokemonService.searchCard(
                     name: lookupState.cardName,
                     number: lookupState.parsedCardNumber
@@ -763,11 +820,40 @@ struct CardPriceLookupView: View {
                 let detailedPricing = try await pokemonService.getDetailedPricing(cardID: match.id)
                 lookupState.tcgPlayerPrices = detailedPricing
 
+                // SAVE TO CACHE
+                savePriceToCache(match: match, pricing: detailedPricing)
+
+                let duration = Date().timeIntervalSince(startTime)
+                print("⏱️ API LOOKUP: \(cacheKey) took \(String(format: "%.2f", duration))s")
+
                 lookupState.addToRecentSearches(lookupState.cardName)
                 lookupState.isLoading = false
 
             } catch {
-                lookupState.errorMessage = "Failed to lookup pricing: \(error.localizedDescription)"
+                let duration = Date().timeIntervalSince(startTime)
+                print("❌ LOOKUP FAILED: \(cacheKey) after \(String(format: "%.2f", duration))s")
+
+                // Improved error messages for common network failures
+                let errorMessage: String
+
+                if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .notConnectedToInternet:
+                        errorMessage = "No internet connection. Please check your WiFi or cellular data."
+                    case .timedOut:
+                        errorMessage = "Request timed out. The server took too long to respond. Please try again."
+                    case .cannotFindHost, .cannotConnectToHost:
+                        errorMessage = "Cannot reach PokemonTCG.io servers. Please try again later."
+                    case .networkConnectionLost:
+                        errorMessage = "Network connection lost. Please check your connection and try again."
+                    default:
+                        errorMessage = "Network error: \(urlError.localizedDescription)"
+                    }
+                } else {
+                    errorMessage = "Failed to lookup pricing. Please try again."
+                }
+
+                lookupState.errorMessage = errorMessage
                 lookupState.isLoading = false
             }
         }
@@ -781,14 +867,58 @@ struct CardPriceLookupView: View {
         autocompleteTask?.cancel()
 
         Task {
+            let startTime = Date()
             lookupState.isLoading = true
+            lookupState.isFromCache = false
+            lookupState.cacheAgeHours = nil
+
+            // CACHE FIRST: Check cache for this specific match
+            if let cachedPrice = try? priceCache.getPrice(cardID: match.id), !cachedPrice.isStale {
+                let duration = Date().timeIntervalSince(startTime)
+                print("✅ CACHE HIT (selectMatch): \(match.id) (age: \(cachedPrice.ageInHours)h, duration: \(String(format: "%.2f", duration))s)")
+                displayCachedResult(cachedPrice)
+                lookupState.isLoading = false
+                return
+            }
+
+            // CACHE MISS OR STALE: Fetch from API
             do {
                 let detailedPricing = try await pokemonService.getDetailedPricing(cardID: match.id)
                 lookupState.tcgPlayerPrices = detailedPricing
+
+                // SAVE TO CACHE
+                savePriceToCache(match: match, pricing: detailedPricing)
+
+                let duration = Date().timeIntervalSince(startTime)
+                print("⏱️ API LOOKUP (selectMatch): \(match.id) took \(String(format: "%.2f", duration))s")
+
                 lookupState.addToRecentSearches(lookupState.cardName)
                 lookupState.isLoading = false
             } catch {
-                lookupState.errorMessage = "Failed to fetch pricing: \(error.localizedDescription)"
+                let duration = Date().timeIntervalSince(startTime)
+                print("❌ LOOKUP FAILED (selectMatch): \(match.id) after \(String(format: "%.2f", duration))s")
+
+                // Improved error messages for common network failures
+                let errorMessage: String
+
+                if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .notConnectedToInternet:
+                        errorMessage = "No internet connection. Please check your WiFi or cellular data."
+                    case .timedOut:
+                        errorMessage = "Request timed out. The server took too long to respond. Please try again."
+                    case .cannotFindHost, .cannotConnectToHost:
+                        errorMessage = "Cannot reach PokemonTCG.io servers. Please try again later."
+                    case .networkConnectionLost:
+                        errorMessage = "Network connection lost. Please check your connection and try again."
+                    default:
+                        errorMessage = "Network error: \(urlError.localizedDescription)"
+                    }
+                } else {
+                    errorMessage = "Failed to fetch pricing. Please try again."
+                }
+
+                lookupState.errorMessage = errorMessage
                 lookupState.isLoading = false
             }
         }
@@ -819,6 +949,87 @@ struct CardPriceLookupView: View {
             withAnimation(.easeInOut(duration: 0.3)) {
                 showCopySuccess = false
             }
+        }
+    }
+
+    // MARK: - Cache Helper Methods
+
+    /// Generate cache key from card name and number
+    private func generateCacheKey(_ cardName: String, _ cardNumber: String?) -> String {
+        let normalized = cardName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if let number = cardNumber {
+            return "\(normalized)_\(number)"
+        }
+        return normalized
+    }
+
+    /// Display cached result in UI
+    private func displayCachedResult(_ cachedPrice: CachedPrice) {
+        // Reconstruct CardMatch from cache
+        lookupState.selectedMatch = CardMatch(
+            id: cachedPrice.cardID,
+            cardName: cachedPrice.cardName,
+            setName: cachedPrice.setName,
+            setID: cachedPrice.setID,
+            cardNumber: cachedPrice.cardNumber,
+            imageURL: cachedPrice.imageURLLarge.flatMap { URL(string: $0) }
+        )
+
+        // Reconstruct DetailedTCGPlayerPricing from cache
+        var pricing = DetailedTCGPlayerPricing(
+            normal: nil,
+            holofoil: nil,
+            reverseHolofoil: nil,
+            firstEdition: nil,
+            unlimited: nil
+        )
+
+        // If we have basic pricing, create a "Normal" variant
+        if cachedPrice.marketPrice != nil || cachedPrice.lowPrice != nil {
+            pricing = DetailedTCGPlayerPricing(
+                normal: DetailedTCGPlayerPricing.PriceBreakdown(
+                    low: cachedPrice.lowPrice,
+                    mid: cachedPrice.midPrice,
+                    high: cachedPrice.highPrice,
+                    market: cachedPrice.marketPrice
+                ),
+                holofoil: nil,
+                reverseHolofoil: nil,
+                firstEdition: nil,
+                unlimited: nil
+            )
+        }
+
+        lookupState.tcgPlayerPrices = pricing
+        lookupState.isFromCache = true
+        lookupState.cacheAgeHours = cachedPrice.ageInHours
+        lookupState.addToRecentSearches(cachedPrice.cardName)
+    }
+
+    /// Save price to cache after API fetch
+    private func savePriceToCache(match: CardMatch, pricing: DetailedTCGPlayerPricing) {
+        // Extract normal variant pricing for basic cache fields
+        let normalVariant = pricing.normal
+
+        let cachedPrice = CachedPrice(
+            cardID: match.id,
+            cardName: match.cardName,
+            setName: match.setName,
+            setID: match.setID,
+            cardNumber: match.cardNumber,
+            marketPrice: normalVariant?.market,
+            lowPrice: normalVariant?.low,
+            midPrice: normalVariant?.mid,
+            highPrice: normalVariant?.high,
+            imageURLSmall: match.imageURL?.absoluteString,
+            imageURLLarge: match.imageURL?.absoluteString
+        )
+
+        do {
+            try priceCache.savePrice(cachedPrice)
+            print("💾 CACHED: \(match.id)")
+        } catch {
+            print("⚠️ Failed to cache price: \(error)")
         }
     }
 }

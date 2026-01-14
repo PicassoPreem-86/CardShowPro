@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Represents a card that has been scanned during a capture session
 struct ScannedCard: Identifiable, Sendable {
