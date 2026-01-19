@@ -33,6 +33,19 @@ final class CameraManager: NSObject, @unchecked Sendable {
     var isSessionRunning = false
     var authorizationStatus: AVAuthorizationStatus = .notDetermined
     var isFlashOn = false
+    var currentZoom: Double = 1.0
+
+    // MARK: - Zoom Properties
+
+    /// Maximum zoom factor supported by the current camera
+    var maxZoomFactor: Double {
+        guard let camera = currentCamera else { return 1.0 }
+        // Clamp to reasonable max for card scanning (5x is usually enough)
+        return min(Double(camera.maxAvailableVideoZoomFactor), 5.0)
+    }
+
+    /// Minimum zoom factor (always 1.0)
+    var minZoomFactor: Double { 1.0 }
 
     // MARK: - Initialization
     override init() {
@@ -357,6 +370,65 @@ final class CameraManager: NSObject, @unchecked Sendable {
 
     var hasFlash: Bool {
         currentCamera?.hasTorch ?? false
+    }
+
+    // MARK: - Zoom Control
+
+    /// Set the camera zoom factor
+    /// - Parameter factor: Zoom factor (1.0 = no zoom, 2.0 = 2x zoom, etc.)
+    nonisolated func setZoom(_ factor: Double) {
+        Task { @MainActor in
+            guard let camera = self.currentCamera else { return }
+
+            let clampedFactor = max(self.minZoomFactor, min(factor, self.maxZoomFactor))
+
+            self.sessionQueue.async {
+                do {
+                    try camera.lockForConfiguration()
+                    camera.videoZoomFactor = CGFloat(clampedFactor)
+                    camera.unlockForConfiguration()
+
+                    Task { @MainActor [weak self] in
+                        self?.currentZoom = clampedFactor
+                    }
+                } catch {
+                    Task { @MainActor [weak self] in
+                        self?.logger.error("Error setting zoom: \(error)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Smoothly animate zoom to target factor
+    /// - Parameters:
+    ///   - factor: Target zoom factor
+    ///   - duration: Animation duration in seconds
+    nonisolated func animateZoom(to factor: Double, duration: TimeInterval = 0.3) {
+        Task { @MainActor in
+            guard let camera = self.currentCamera else { return }
+
+            let clampedFactor = max(self.minZoomFactor, min(factor, self.maxZoomFactor))
+
+            self.sessionQueue.async {
+                do {
+                    try camera.lockForConfiguration()
+
+                    // Use ramp for smooth animation
+                    camera.ramp(toVideoZoomFactor: CGFloat(clampedFactor), withRate: Float(clampedFactor / duration))
+
+                    camera.unlockForConfiguration()
+
+                    Task { @MainActor [weak self] in
+                        self?.currentZoom = clampedFactor
+                    }
+                } catch {
+                    Task { @MainActor [weak self] in
+                        self?.logger.error("Error animating zoom: \(error)")
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -12,10 +12,10 @@ public struct ContentView: View {
                 }
                 .tag(AppState.Tab.dashboard)
 
-            CardPriceLookupView()
+            ScanView(showBackButton: false)
                 .environment(appState)
                 .tabItem {
-                    Label("Scan", systemImage: "text.magnifyingglass")
+                    Label("Scan", systemImage: "camera.viewfinder")
                 }
                 .tag(AppState.Tab.scan)
 
