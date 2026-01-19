@@ -15,7 +15,7 @@ public struct CardListView: View {
     @State private var profitFilter: ProfitFilter = .all
     @State private var showSortSheet = false
     @State private var showFilterSheet = false
-    @State private var showScanSheet = false
+    @State private var navigateToScan = false
 
     enum ViewMode {
         case list
@@ -256,17 +256,9 @@ public struct CardListView: View {
                 FilterOptionsSheet(selectedFilter: $profitFilter)
                     .presentationDetents([.height(450)])
             }
-            .sheet(isPresented: $showScanSheet) {
-                NavigationStack {
-                    ScanView(showBackButton: true)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Cancel") {
-                                    showScanSheet = false
-                                }
-                            }
-                        }
-                }
+            .navigationDestination(isPresented: $navigateToScan) {
+                ScanView(showBackButton: true)
+                    .navigationBarHidden(true)
             }
             .alert("Delete \(selectedCards.count) card(s)?", isPresented: $showBulkDeleteAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -449,7 +441,7 @@ public struct CardListView: View {
             VStack(spacing: DesignSystem.Spacing.xs) {
                 // Primary action - Scan Cards
                 Button {
-                    showScanSheet = true
+                    navigateToScan = true
                 } label: {
                     HStack(spacing: DesignSystem.Spacing.xxs) {
                         Image(systemName: "camera.fill")

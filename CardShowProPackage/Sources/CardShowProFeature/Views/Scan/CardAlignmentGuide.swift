@@ -35,8 +35,6 @@ struct CardAlignmentGuide: View {
     let frameMode: FrameMode
     let isCapturing: Bool
 
-    @State private var pulseAnimation = false
-    @State private var cornerOffset: CGFloat = 0
 
     // Bright green color for corner brackets (#7FFF00 / lime green)
     private let bracketColor = Color(red: 0.5, green: 1.0, blue: 0.0)
@@ -74,9 +72,6 @@ struct CardAlignmentGuide: View {
                         )
                 }
             }
-        }
-        .onAppear {
-            startAnimations()
         }
     }
 
@@ -138,7 +133,6 @@ struct CardAlignmentGuide: View {
         }
         .frame(width: size.width, height: size.height)
         .foregroundStyle(isCapturing ? .white : bracketColor)
-        .offset(y: pulseAnimation && !isCapturing ? cornerOffset : 0)
         .animation(.easeInOut(duration: 0.15), value: isCapturing)
     }
 
@@ -160,15 +154,6 @@ struct CardAlignmentGuide: View {
         }
     }
 
-    // MARK: - Animations
-
-    private func startAnimations() {
-        // Subtle pulse animation for corners when not capturing
-        withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-            pulseAnimation = true
-            cornerOffset = 2
-        }
-    }
 }
 
 // MARK: - Corner Bracket Component
