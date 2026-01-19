@@ -111,24 +111,18 @@ public final class InventoryCard {
     }
 
     /// Convenience initializer from ScannedCard
+    @MainActor
     convenience init(from scannedCard: ScannedCard) {
-        // Convert Image to PNG data
-        #if canImport(UIKit)
-        let imageData = scannedCard.image.pngData()
-        #else
-        let imageData: Data? = nil
-        #endif
-
         self.init(
             id: scannedCard.id,
-            cardName: scannedCard.cardName,
+            cardName: scannedCard.name,
             cardNumber: scannedCard.cardNumber,
             setName: scannedCard.setName,
-            gameType: scannedCard.game.rawValue,
-            marketValue: scannedCard.marketValue,
-            acquiredDate: scannedCard.timestamp,
-            imageData: imageData,
-            confidence: scannedCard.confidence
+            gameType: CardGame.pokemon.rawValue, // ScannedCard is Pokemon only for now
+            marketValue: scannedCard.marketPrice ?? 0.0,
+            acquiredDate: scannedCard.scannedAt,
+            imageData: nil, // ScannedCard uses imageURL, not UIImage
+            confidence: 0.0 // ScannedCard doesn't track confidence
         )
     }
 

@@ -2,9 +2,11 @@ import SwiftUI
 import SwiftData
 import AVFoundation
 
-/// Redesigned camera-first card scanning view
+/// Redesigned camera-first card scanning view with seamless flow
 /// Features: Search bar, contained camera preview with corner brackets,
-/// zoom controls, frame mode selector, and recent scans section
+/// zoom controls, frame mode selector, and thumbnail strip for recent scans
+///
+/// Seamless Flow: Tap to scan → auto-identify + price → thumbnail appears
 struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -14,7 +16,8 @@ struct ScanView: View {
 
     @State private var cameraManager = CameraManager()
     @State private var ocrService = CardOCRService.shared
-    @State private var recentScansManager = RecentScansManager.shared
+    @State private var scannedCardsManager = ScannedCardsManager.shared
+    private let pokemonService = PokemonTCGService.shared
 
     // Search state
     @State private var searchText: String = ""
@@ -23,22 +26,22 @@ struct ScanView: View {
     @State private var selectedZoom: ZoomLevel = .x1_5
     @State private var selectedFrameMode: FrameMode = .raw
 
-    // Capture state
-    @State private var capturedImage: UIImage?
-    @State private var ocrResult: CardOCRService.OCRResult?
+    // Processing state (seamless flow)
     @State private var isCapturing = false
-    @State private var isProcessingOCR = false
+    @State private var isProcessing = false
+    @State private var processingStatus: String = ""
 
     // UI state - false = camera large (default), true = recent scans expanded
     @State private var isRecentScansExpanded = false
 
-    // Sheet states
-    @State private var showScanResult = false
+    // Sheet states (for manual entry fallback)
     @State private var showManualEntry = false
-    @State private var showCardEntry = false
-    @State private var selectedCardMatch: CardMatch?
 
-    // Error state
+    // Toast/error state
+    @State private var toastMessage: String?
+    @State private var showToast = false
+
+    // Error alert state
     @State private var errorMessage: String?
     @State private var showError = false
 
@@ -51,8 +54,8 @@ struct ScanView: View {
         UIScreen.main.bounds.height * 0.70
     }
 
-    // Height for collapsed recent scans (just header peek)
-    private let recentScansCollapsedHeight: CGFloat = 100
+    // Height for collapsed recent scans (just header + thumbnail strip)
+    private let recentScansCollapsedHeight: CGFloat = 140
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -79,35 +82,17 @@ struct ScanView: View {
 
             // Overlay: Recent scans sliding panel
             recentScansOverlay
+
+            // Toast overlay
+            if showToast, let message = toastMessage {
+                toastView(message: message)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(100)
+            }
         }
         .background(Color.black.ignoresSafeArea())
-        .sheet(isPresented: $showScanResult) {
-            if let image = capturedImage, let result = ocrResult {
-                ScanResultView(
-                    capturedImage: image,
-                    ocrResult: result,
-                    onRetake: {
-                        resetCapture()
-                    },
-                    onLookupComplete: { cardMatch in
-                        selectedCardMatch = cardMatch
-                        showScanResult = false
-
-                        // Add to recent scans
-                        addToRecentScans(cardMatch)
-
-                        showCardEntry = true
-                    }
-                )
-            }
-        }
         .sheet(isPresented: $showManualEntry) {
             CardPriceLookupView()
-        }
-        .sheet(isPresented: $showCardEntry) {
-            if let match = selectedCardMatch {
-                cardEntrySheet(for: match)
-            }
         }
         .alert("Camera Error", isPresented: $showError) {
             Button("OK", role: .cancel) { }
@@ -150,26 +135,26 @@ struct ScanView: View {
                     // Corner brackets overlay
                     CardAlignmentGuide(
                         frameMode: selectedFrameMode,
-                        isCapturing: isCapturing
+                        isCapturing: isCapturing || isProcessing
                     )
                     .padding(12)
 
-                    // Center instruction text
-                    if !isCapturing && !isProcessingOCR {
+                    // Center instruction text (when idle)
+                    if !isCapturing && !isProcessing {
                         Text("Tap Anywhere to Scan")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.white.opacity(0.9))
                     }
 
                     // Processing overlay
-                    if isProcessingOCR {
+                    if isProcessing {
                         processingOverlay
                     }
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    capturePhoto()
+                    captureAndProcess()
                 }
 
                 // Bottom controls row
@@ -227,6 +212,7 @@ struct ScanView: View {
                     // Could load from persistence in future
                 }
             )
+            .environment(\.modelContext, modelContext)
         }
         .frame(height: isRecentScansExpanded ? recentScansExpandedHeight : recentScansCollapsedHeight)
         .background(
@@ -325,7 +311,7 @@ struct ScanView: View {
                     .tint(Color(red: 0.5, green: 1.0, blue: 0.0))
                     .scaleEffect(1.3)
 
-                Text("Analyzing card...")
+                Text(processingStatus.isEmpty ? "Processing..." : processingStatus)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.white)
             }
@@ -333,32 +319,23 @@ struct ScanView: View {
         .padding(12)
     }
 
-    // MARK: - Card Entry Sheet
+    // MARK: - Toast View
 
-    private func cardEntrySheet(for match: CardMatch) -> some View {
-        NavigationStack {
-            let scanState = ScanFlowState()
-            let _ = {
-                scanState.cardNumber = match.cardNumber
-                scanState.cardImageURL = match.imageURL
-            }()
-
-            CardEntryView(
-                pokemonName: match.cardName,
-                setName: match.setName,
-                setID: match.setID,
-                state: scanState
-            )
-            .environment(\.modelContext, modelContext)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        showCardEntry = false
-                        resetCapture()
-                    }
-                }
-            }
+    private func toastView(message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color(white: 0.2))
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
+        .padding(.top, 100) // Position below status bar
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Camera Control
@@ -371,10 +348,10 @@ struct ScanView: View {
         cameraManager.stopSession()
     }
 
-    // MARK: - Capture Flow
+    // MARK: - Seamless Capture Flow
 
-    private func capturePhoto() {
-        guard !isCapturing && !isProcessingOCR else { return }
+    private func captureAndProcess() {
+        guard !isCapturing && !isProcessing else { return }
         guard cameraManager.previewLayer != nil else { return }
 
         isCapturing = true
@@ -382,60 +359,76 @@ struct ScanView: View {
 
         Task {
             do {
-                // Capture photo
+                // 1. Capture photo
+                processingStatus = "Capturing..."
                 let image = try await cameraManager.capturePhoto()
-                capturedImage = image
 
-                // Start OCR processing
                 isCapturing = false
-                isProcessingOCR = true
+                isProcessing = true
 
-                // Perform OCR
-                let result = try await ocrService.recognizeText(from: image)
-                ocrResult = result
+                // 2. OCR
+                processingStatus = "Reading card..."
+                let ocrResult = try await ocrService.recognizeText(from: image)
 
-                // Pre-fill search with OCR result
-                if let cardName = result.cardName, !cardName.isEmpty {
-                    searchText = cardName
+                guard let cardName = ocrResult.cardName, !cardName.isEmpty else {
+                    // Show toast and allow retry
+                    await showErrorToast("Couldn't read card name. Try again or use manual search.")
+                    return
                 }
 
+                // 3. Search for card
+                processingStatus = "Searching..."
+                let matches = try await pokemonService.searchCardFuzzy(
+                    name: cardName,
+                    number: ocrResult.cardNumber
+                )
+
+                guard let bestMatch = matches.first else {
+                    await showErrorToast("No cards found for '\(cardName)'. Try manual search.")
+                    return
+                }
+
+                // 4. Add to scanned cards (pricing fetched automatically by manager)
                 await MainActor.run {
-                    isProcessingOCR = false
+                    scannedCardsManager.addCard(from: bestMatch)
                     HapticManager.shared.success()
-                    showScanResult = true
+                }
+
+                // 5. Reset state
+                await MainActor.run {
+                    isProcessing = false
+                    processingStatus = ""
                 }
 
             } catch {
                 await MainActor.run {
                     isCapturing = false
-                    isProcessingOCR = false
-                    errorMessage = error.localizedDescription
-                    showError = true
-                    HapticManager.shared.error()
+                    isProcessing = false
+                    processingStatus = ""
                 }
+                await showErrorToast("Scan failed. Try again.")
+                HapticManager.shared.error()
             }
         }
     }
 
-    private func resetCapture() {
-        capturedImage = nil
-        ocrResult = nil
-        selectedCardMatch = nil
+    @MainActor
+    private func showErrorToast(_ message: String) async {
         isCapturing = false
-        isProcessingOCR = false
-    }
+        isProcessing = false
+        processingStatus = ""
 
-    // MARK: - Recent Scans
+        toastMessage = message
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showToast = true
+        }
 
-    private func addToRecentScans(_ match: CardMatch) {
-        // Note: CardMatch doesn't include price - it's retrieved later in CardEntryView
-        // For now, add with price 0. Could be updated when price is fetched.
-        recentScansManager.addScan(
-            cardName: match.cardName,
-            setName: match.setName,
-            price: 0, // Price not available at scan time
-            thumbnailURL: match.imageURL
-        )
+        // Auto-dismiss after 3 seconds
+        try? await Task.sleep(for: .seconds(3))
+
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showToast = false
+        }
     }
 }
 

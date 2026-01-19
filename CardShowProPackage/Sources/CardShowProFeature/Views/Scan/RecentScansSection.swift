@@ -1,46 +1,134 @@
 import SwiftUI
+import SwiftData
 
 /// Collapsible section showing recent scans from current session
 /// Features running total of prices for bulk scanning scenarios
-/// Designed to work as a sliding overlay panel
+/// Designed to work as a sliding overlay panel with thumbnail strip
 struct RecentScansSection: View {
     @Binding var isExpanded: Bool
-    @State private var recentScansManager = RecentScansManager.shared
+    @State private var scannedCardsManager = ScannedCardsManager.shared
+    @State private var selectedCard: ScannedCard?
+    @Environment(\.modelContext) private var modelContext
 
     let onLoadPrevious: () -> Void
+
+    private let accentGreen = Color(red: 0.5, green: 1.0, blue: 0.0)
 
     var body: some View {
         VStack(spacing: 0) {
             // Section header (always visible)
             sectionHeader
 
-            // Content
+            // Content based on expansion state
             if isExpanded {
-                // Expanded: Full scrollable list
-                if recentScansManager.hasScans {
-                    ScrollView {
-                        scansList
-                    }
-                } else {
-                    expandedEmptyState
-                }
+                expandedContent
             } else {
-                // Collapsed: Just a hint
-                collapsedHint
+                collapsedContent
+            }
+        }
+        .fullScreenCover(item: $selectedCard) { card in
+            ScannedCardDetailView(card: card)
+                .environment(\.modelContext, modelContext)
+        }
+    }
+
+    // MARK: - Section Header
+
+    private var sectionHeader: some View {
+        HStack {
+            Text("Recent scans")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+
+            if scannedCardsManager.hasCards {
+                Text("\(scannedCardsManager.count)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.gray)
+                    .clipShape(Capsule())
+            }
+
+            Spacer()
+
+            // Running total badge
+            HStack(spacing: 4) {
+                if scannedCardsManager.cardsWithPrices < scannedCardsManager.count {
+                    ProgressView()
+                        .tint(accentGreen)
+                        .scaleEffect(0.6)
+                }
+                Text(scannedCardsManager.formattedTotal)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(accentGreen)
+                Text("total")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.gray)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - Collapsed Content (Thumbnail Strip)
+
+    private var collapsedContent: some View {
+        Group {
+            if scannedCardsManager.hasCards {
+                thumbnailStrip
+            } else {
+                collapsedEmptyHint
             }
         }
     }
 
-    // MARK: - Collapsed Hint
-
-    private var collapsedHint: some View {
-        Text(recentScansManager.hasScans
-             ? "Tap to view \(recentScansManager.count) scanned card\(recentScansManager.count == 1 ? "" : "s")"
-             : "Scanned cards will appear here")
+    private var collapsedEmptyHint: some View {
+        Text("Scanned cards will appear here")
             .font(.system(size: 13))
             .foregroundStyle(.gray)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
+    }
+
+    private var thumbnailStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(scannedCardsManager.cards) { card in
+                    CardThumbnailView(card: card)
+                        .onTapGesture {
+                            selectedCard = card
+                            HapticManager.shared.light()
+                        }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+        }
+    }
+
+    // MARK: - Expanded Content (Full List)
+
+    private var expandedContent: some View {
+        Group {
+            if scannedCardsManager.hasCards {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Thumbnail strip at top when expanded too
+                        thumbnailStrip
+                            .padding(.bottom, 8)
+
+                        Divider()
+                            .background(Color.white.opacity(0.1))
+
+                        // Full card list
+                        scansList
+                    }
+                }
+            } else {
+                expandedEmptyState
+            }
+        }
     }
 
     // MARK: - Expanded Empty State
@@ -67,43 +155,28 @@ struct RecentScansSection: View {
         .padding(.horizontal, 32)
     }
 
-    // MARK: - Section Header
-
-    private var sectionHeader: some View {
-        HStack {
-            Text("Recent scans")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-
-            Spacer()
-
-            // Running total badge
-            Text(recentScansManager.formattedTotal + " total")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color(red: 0.5, green: 1.0, blue: 0.0)) // Green
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
     // MARK: - Scans List (for expanded state)
 
     private var scansList: some View {
         LazyVStack(spacing: 0) {
-            ForEach(recentScansManager.scans) { scan in
-                scanRow(scan)
+            ForEach(scannedCardsManager.cards) { card in
+                scanRow(card)
+                    .onTapGesture {
+                        selectedCard = card
+                        HapticManager.shared.light()
+                    }
 
-                if scan.id != recentScansManager.scans.last?.id {
+                if card.id != scannedCardsManager.cards.last?.id {
                     Divider()
                         .background(Color.white.opacity(0.1))
                 }
             }
 
             // Clear all button
-            if recentScansManager.count > 0 {
+            if scannedCardsManager.count > 0 {
                 Button {
                     withAnimation {
-                        recentScansManager.clearAll()
+                        scannedCardsManager.clearAll()
                     }
                     HapticManager.shared.light()
                 } label: {
@@ -121,10 +194,10 @@ struct RecentScansSection: View {
         .padding(.horizontal, 16)
     }
 
-    private func scanRow(_ scan: RecentScan) -> some View {
+    private func scanRow(_ card: ScannedCard) -> some View {
         HStack(spacing: 12) {
             // Thumbnail
-            if let url = scan.thumbnailURL {
+            if let url = card.imageURL {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
@@ -145,12 +218,12 @@ struct RecentScansSection: View {
 
             // Card info
             VStack(alignment: .leading, spacing: 2) {
-                Text(scan.cardName)
+                Text(card.name)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
-                Text(scan.setName)
+                Text(card.setName)
                     .font(.system(size: 12))
                     .foregroundStyle(.gray)
                     .lineLimit(1)
@@ -160,25 +233,28 @@ struct RecentScansSection: View {
 
             // Price and time
             VStack(alignment: .trailing, spacing: 2) {
-                Text(scan.formattedPrice)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.5, green: 1.0, blue: 0.0)) // Green
+                if card.isLoadingPrice {
+                    ProgressView()
+                        .tint(accentGreen)
+                        .scaleEffect(0.7)
+                } else {
+                    Text(card.formattedPrice)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(card.displayPrice != nil ? accentGreen : .gray)
+                }
 
-                Text(scan.timeAgo)
+                Text(card.timeAgo)
                     .font(.system(size: 11))
                     .foregroundStyle(.gray)
             }
+
+            // Chevron for detail
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12))
+                .foregroundStyle(.gray.opacity(0.5))
         }
         .padding(.vertical, 10)
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                withAnimation {
-                    recentScansManager.removeScan(id: scan.id)
-                }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
+        .contentShape(Rectangle())
     }
 
     private var placeholderThumbnail: some View {
@@ -191,35 +267,73 @@ struct RecentScansSection: View {
                     .foregroundStyle(.gray)
             )
     }
+}
 
-    // MARK: - Empty State
+// MARK: - Card Thumbnail View
 
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Text("Scanned cards will appear here")
-                .font(.system(size: 14))
-                .foregroundStyle(.gray)
+/// Individual card thumbnail for the horizontal strip
+struct CardThumbnailView: View {
+    @Bindable var card: ScannedCard
 
-            Button(action: onLoadPrevious) {
-                Text("Tap to load previous scans.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color(red: 0.5, green: 1.0, blue: 0.0)) // Green
+    private let accentGreen = Color(red: 0.5, green: 1.0, blue: 0.0)
+
+    var body: some View {
+        VStack(spacing: 6) {
+            // Card image
+            ZStack {
+                if let url = card.imageURL {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        case .failure, .empty:
+                            placeholderImage
+                        @unknown default:
+                            placeholderImage
+                        }
+                    }
+                } else {
+                    placeholderImage
+                }
+            }
+            .frame(width: 60, height: 84)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
+
+            // Price
+            if card.isLoadingPrice {
+                ProgressView()
+                    .tint(accentGreen)
+                    .scaleEffect(0.6)
+                    .frame(height: 16)
+            } else {
+                Text(card.formattedPrice)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(card.displayPrice != nil ? accentGreen : .gray)
+                    .lineLimit(1)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(white: 0.12))
-        )
-        .padding(.horizontal, 16)
-        .padding(.bottom, 16)
+    }
+
+    private var placeholderImage: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color(white: 0.15))
+            .overlay(
+                Image(systemName: "photo")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.gray.opacity(0.5))
+            )
     }
 }
 
 // MARK: - Preview
 
+#if DEBUG
 #Preview("Empty State") {
     ZStack {
         Color.black.ignoresSafeArea()
@@ -234,7 +348,47 @@ struct RecentScansSection: View {
     }
 }
 
-#Preview("With Scans") {
+#Preview("With Cards - Collapsed") {
+    ZStack {
+        Color.black.ignoresSafeArea()
+
+        VStack {
+            Spacer()
+
+            RecentScansSection(
+                isExpanded: .constant(false),
+                onLoadPrevious: {}
+            )
+            .onAppear {
+                let manager = ScannedCardsManager.shared
+                // Add mock cards
+                let card1 = ScannedCard(
+                    cardID: "base1-4",
+                    name: "Charizard",
+                    setName: "Base Set",
+                    setID: "base1",
+                    cardNumber: "4",
+                    imageURL: URL(string: "https://images.pokemontcg.io/base1/4.png")
+                )
+                card1.marketPrice = 350.00
+                manager.addCard(card1)
+
+                let card2 = ScannedCard(
+                    cardID: "base1-58",
+                    name: "Pikachu",
+                    setName: "Base Set",
+                    setID: "base1",
+                    cardNumber: "58",
+                    imageURL: URL(string: "https://images.pokemontcg.io/base1/58.png")
+                )
+                card2.marketPrice = 25.00
+                manager.addCard(card2)
+            }
+        }
+    }
+}
+
+#Preview("With Cards - Expanded") {
     ZStack {
         Color.black.ignoresSafeArea()
 
@@ -245,19 +399,7 @@ struct RecentScansSection: View {
                 isExpanded: .constant(true),
                 onLoadPrevious: {}
             )
-            .onAppear {
-                let manager = RecentScansManager.shared
-                manager.addScan(
-                    cardName: "Charizard VMAX",
-                    setName: "Shining Fates",
-                    price: 125.00
-                )
-                manager.addScan(
-                    cardName: "Pikachu V",
-                    setName: "Vivid Voltage",
-                    price: 15.50
-                )
-            }
         }
     }
 }
+#endif
