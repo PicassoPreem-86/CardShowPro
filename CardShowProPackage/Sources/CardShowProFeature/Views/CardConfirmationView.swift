@@ -468,6 +468,7 @@ struct CardConfirmationView: View {
             cardName: cardName,
             setName: setName,
             cardNumber: cardNumber,
+            setCode: recognitionResult.setCode,  // Preserve existing set code
             confidence: recognitionResult.confidence,
             game: recognitionResult.game,
             rarity: recognitionResult.rarity,
@@ -527,6 +528,7 @@ private struct ConfirmationDetailRow<Content: View>: View {
             cardName: "Charizard VMAX",
             setName: "Darkness Ablaze",
             cardNumber: "020",
+            setCode: "DAA",  // Preview set code
             confidence: 0.94,
             game: .pokemon,
             rarity: "Rare Holo VMAX",

@@ -5,6 +5,7 @@ struct RecognitionResult: Codable, Sendable {
     let cardName: String
     let setName: String
     let cardNumber: String
+    let setCode: String?         // NEW: Set code (e.g., "SV9", "base1")
     let confidence: Double
     let game: CardGame
     let rarity: String?
@@ -70,6 +71,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
 
         // Additional metadata fields
         let setName: String?
+        let setID: String?           // NEW: Set code/ID field
         let number: String?
         let rarity: String?
         let type: String?
@@ -79,6 +81,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
         private enum CodingKeys: String, CodingKey {
             case name, prob, tags
             case setName = "set_name"
+            case setID = "set_id"     // NEW: Map set_id from Ximilar response
             case number, rarity, type, subtype, supertype
         }
     }
@@ -113,6 +116,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
 
         // Extract set information - try from direct fields first, then from tags
         var setName = firstObject.setName ?? "Unknown Set"
+        var setCode = firstObject.setID                    // NEW: Extract set code
         var cardNumber = firstObject.number ?? "???"
         var rarity = firstObject.rarity
         var cardType = firstObject.type
@@ -125,6 +129,9 @@ struct XimilarRecognitionResponse: Codable, Sendable {
                 let tagName = tag.name
                 if tagName.starts(with: "set:") {
                     setName = String(tagName.dropFirst(4))
+                } else if tagName.starts(with: "set_id:") || tagName.starts(with: "setid:") {
+                    // NEW: Parse set code from tags
+                    setCode = String(tagName.dropFirst(tagName.starts(with: "set_id:") ? 7 : 6))
                 } else if tagName.starts(with: "number:") {
                     cardNumber = String(tagName.dropFirst(7))
                 } else if tagName.starts(with: "rarity:") {
@@ -153,6 +160,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
                 cardName: actualCardName,
                 setName: setName,
                 cardNumber: cardNumber,
+                setCode: setCode,              // NEW: Include set code
                 confidence: confidence,
                 game: game,
                 rarity: rarity,
@@ -166,6 +174,7 @@ struct XimilarRecognitionResponse: Codable, Sendable {
             cardName: cardName,
             setName: setName,
             cardNumber: cardNumber,
+            setCode: setCode,                  // NEW: Include set code
             confidence: confidence,
             game: game,
             rarity: rarity,

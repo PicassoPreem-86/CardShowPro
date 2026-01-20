@@ -2,11 +2,52 @@ import SwiftUI
 import SwiftData
 import AVFoundation
 
+/// Progress states for scan feedback - gives users specific status updates
+enum ScanProgress: Equatable {
+    case idle
+    case capturing
+    case recognizingCard    // OCR text recognition in progress (~200ms)
+    case searchingDatabase  // Local DB or API search in progress
+    case cardNotRecognized  // Recognition failed
+    case noMatchesFound(String)  // Search failed, includes attempted name
+
+    var displayText: String {
+        switch self {
+        case .idle:
+            return ""
+        case .capturing:
+            return "Capturing..."
+        case .recognizingCard:
+            return "Identifying card..."
+        case .searchingDatabase:
+            return "Fetching details..."
+        case .cardNotRecognized:
+            return "Card not recognized"
+        case .noMatchesFound(let name):
+            return "No matches for '\(name)'"
+        }
+    }
+
+    var isProcessing: Bool {
+        switch self {
+        case .idle, .cardNotRecognized, .noMatchesFound:
+            return false
+        case .capturing, .recognizingCard, .searchingDatabase:
+            return true
+        }
+    }
+}
+
 /// Redesigned camera-first card scanning view with seamless flow
 /// Features: Search bar, contained camera preview with corner brackets,
 /// zoom controls, frame mode selector, and thumbnail strip for recent scans
 ///
 /// Seamless Flow: Tap to scan → auto-identify + price → thumbnail appears
+///
+/// NEW Architecture (V2):
+/// - Local SQLite database with FTS5 for <50ms search
+/// - Optional live video mode with auto-capture
+/// - Card rectification for improved recognition
 struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -15,21 +56,24 @@ struct ScanView: View {
     let showBackButton: Bool
 
     @State private var cameraManager = CameraManager()
-    @State private var ocrService = CardOCRService.shared
+    @State private var ocrService = CardOCRService.shared  // Primary recognition method (~200ms)
     @State private var scannedCardsManager = ScannedCardsManager.shared
     private let pokemonService = PokemonTCGService.shared
+
+    // NEW: Feature flags and local database
+    @State private var featureFlags = FeatureFlags.shared
+    private let localDB = LocalCardDatabase.shared
+    private let rectifier = CardImageRectifier.shared
 
     // Search state
     @State private var searchText: String = ""
 
     // Camera state
-    @State private var selectedZoom: ZoomLevel = .x1_5
     @State private var selectedFrameMode: FrameMode = .raw
+    @State private var selectedZoom: Double = 1.5
 
-    // Processing state (seamless flow)
-    @State private var isCapturing = false
-    @State private var isProcessing = false
-    @State private var processingStatus: String = ""
+    // Processing state (seamless flow with specific progress feedback)
+    @State private var scanProgress: ScanProgress = .idle
 
     // UI state - false = camera large (default), true = recent scans expanded
     @State private var isRecentScansExpanded = false
@@ -44,6 +88,11 @@ struct ScanView: View {
     // Error alert state
     @State private var errorMessage: String?
     @State private var showError = false
+
+    // NEW: Ambiguity handling state
+    @State private var ambiguousMatches: [LocalCardMatch] = []
+    @State private var suggestedSets: [String] = []
+    @State private var showAmbiguitySheet = false
 
     init(showBackButton: Bool = false) {
         self.showBackButton = showBackButton
@@ -94,6 +143,19 @@ struct ScanView: View {
         .sheet(isPresented: $showManualEntry) {
             CardPriceLookupView()
         }
+        .sheet(isPresented: $showAmbiguitySheet) {
+            AmbiguousMatchSheet(
+                candidates: ambiguousMatches,
+                suggestedSets: suggestedSets,
+                onSelect: { selectedCard in
+                    // User selected a card from the ambiguity sheet
+                    let cardMatch = selectedCard.toCardMatch()
+                    scannedCardsManager.addCard(from: cardMatch)
+                    HapticManager.shared.success()
+                    scanProgress = .idle
+                }
+            )
+        }
         .alert("Camera Error", isPresented: $showError) {
             Button("OK", role: .cancel) { }
             if cameraManager.authorizationStatus == .denied {
@@ -108,11 +170,40 @@ struct ScanView: View {
         }
         .onAppear {
             startCamera()
-            // Apply initial zoom
-            cameraManager.setZoom(selectedZoom.rawValue)
+            // Configure cache for faster repeat scans
+            scannedCardsManager.configure(modelContext: modelContext)
+
+            // Configure camera for initial zoom after short delay (camera needs to initialize)
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                cameraManager.setZoom(selectedZoom)
+            }
+
+            // Initialize local database for fast search
+            Task {
+                if await !localDB.isReady {
+                    do {
+                        try await localDB.initialize()
+                    } catch {
+                        // Local database init failed - will use remote API as fallback
+                    }
+                }
+            }
         }
         .onDisappear {
             stopCamera()
+        }
+        .onChange(of: selectedFrameMode) { oldMode, newMode in
+            // Set default zoom for each frame mode
+            let defaultZoom: Double
+            switch newMode {
+            case .raw, .graded:
+                defaultZoom = 1.5
+            case .bulk:
+                defaultZoom = 2.0
+            }
+            selectedZoom = defaultZoom
+            cameraManager.setZoom(defaultZoom)
         }
     }
 
@@ -135,19 +226,19 @@ struct ScanView: View {
                     // Corner brackets overlay
                     CardAlignmentGuide(
                         frameMode: selectedFrameMode,
-                        isCapturing: isCapturing || isProcessing
+                        isCapturing: scanProgress.isProcessing
                     )
                     .padding(12)
 
                     // Center instruction text (when idle)
-                    if !isCapturing && !isProcessing {
+                    if scanProgress == .idle {
                         Text("Tap Anywhere to Scan")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.white.opacity(0.9))
                     }
 
                     // Processing overlay
-                    if isProcessing {
+                    if scanProgress.isProcessing {
                         processingOverlay
                     }
                 }
@@ -157,20 +248,45 @@ struct ScanView: View {
                     captureAndProcess()
                 }
 
-                // Bottom controls row
-                HStack {
-                    // Zoom controls
-                    ZoomControlsView(
-                        selectedZoom: $selectedZoom,
-                        onZoomChange: { level in
-                            cameraManager.animateZoom(to: level.rawValue)
+                // Bottom controls
+                VStack(spacing: 10) {
+                    // Zoom selector row (centered)
+                    ZoomSelector(selectedZoom: $selectedZoom) { zoom in
+                        cameraManager.setZoom(zoom)
+                    }
+
+                    // Flash and Frame mode row
+                    HStack {
+                        // Flash toggle button
+                        if cameraManager.hasFlash {
+                            Button {
+                                cameraManager.toggleFlash()
+                                HapticManager.shared.light()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                                        .font(.system(size: 14, weight: .medium))
+
+                                    Text(cameraManager.isFlashOn ? "On" : "Off")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .foregroundStyle(cameraManager.isFlashOn ? .black : .white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(cameraManager.isFlashOn ? Color(red: 0.5, green: 1.0, blue: 0.0) : Color.white.opacity(0.2))
+                                )
+                            }
+                            .accessibilityLabel("Flash \(cameraManager.isFlashOn ? "on" : "off")")
+                            .accessibilityHint("Tap to toggle flash")
                         }
-                    )
 
-                    Spacer()
+                        Spacer()
 
-                    // Frame mode selector
-                    FrameModeSelector(selectedMode: $selectedFrameMode)
+                        // Frame mode selector
+                        FrameModeSelector(selectedMode: $selectedFrameMode)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
@@ -311,7 +427,7 @@ struct ScanView: View {
                     .tint(Color(red: 0.5, green: 1.0, blue: 0.0))
                     .scaleEffect(1.3)
 
-                Text(processingStatus.isEmpty ? "Processing..." : processingStatus)
+                Text(scanProgress.displayText.isEmpty ? "Processing..." : scanProgress.displayText)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.white)
             }
@@ -348,65 +464,161 @@ struct ScanView: View {
         cameraManager.stopSession()
     }
 
-    // MARK: - Seamless Capture Flow
+    // MARK: - Seamless Capture Flow (OCR → Local DB Primary, Remote API Fallback)
+    // FAST: OCR (~200ms) → Local SQLite FTS5 (<50ms) = sub-500ms total
+    // Remote API only used when local database has no matches
 
     private func captureAndProcess() {
-        guard !isCapturing && !isProcessing else { return }
+        guard scanProgress == .idle else { return }
         guard cameraManager.previewLayer != nil else { return }
 
-        isCapturing = true
+        scanProgress = .capturing
         HapticManager.shared.medium()
 
         Task {
             do {
                 // 1. Capture photo
-                processingStatus = "Capturing..."
-                let image = try await cameraManager.capturePhoto()
+                let originalImage = try await cameraManager.capturePhoto()
+                var image = originalImage
 
-                isCapturing = false
-                isProcessing = true
+                // 1b. OPTIONAL: Rectify image for better OCR accuracy
+                var didRectify = false
+                if await featureFlags.shouldRectifyImages {
+                    let detector = CardQuadrilateralDetector()
+                    if let detection = await detector.processImage(originalImage),
+                       let rectified = rectifier.rectifyCard(from: originalImage, quadrilateral: detection) {
+                        image = rectified
+                        didRectify = true
+                    }
+                }
 
-                // 2. OCR
-                processingStatus = "Reading card..."
-                let ocrResult = try await ocrService.recognizeText(from: image)
+                // 2. OCR Recognition (Fast: ~200ms)
+                await MainActor.run { scanProgress = .recognizingCard }
 
-                guard let cardName = ocrResult.cardName, !cardName.isEmpty else {
-                    // Show toast and allow retry
-                    await showErrorToast("Couldn't read card name. Try again or use manual search.")
+                var ocrResult = try await ocrService.recognizeText(from: image)
+
+                // 2b. FALLBACK: If rectified image failed to find card name, retry with original
+                // This helps with CJK cards where rectification downscaling loses detail
+                if ocrResult.cardName == nil && didRectify {
+                    print("🔤 DEBUG [Scan]: Rectified OCR failed, retrying with original high-res image...")
+                    ocrResult = try await ocrService.recognizeText(from: originalImage)
+                }
+
+                // Extract OCR results
+                let cardName = ocrResult.cardName
+                let cardNumber = ocrResult.cardNumber
+
+                // FALLBACK: If no name found but we have a number, try number-only search
+                // This helps when OCR misreads CJK card names but gets the number right
+                if (cardName == nil || cardName!.isEmpty) && (cardNumber == nil || cardNumber!.isEmpty) {
+                    await MainActor.run { scanProgress = .cardNotRecognized }
+                    await showErrorToast("Card not recognized. Try better lighting or manual search.")
                     return
                 }
 
-                // 3. Search for card
-                processingStatus = "Searching..."
-                let matches = try await pokemonService.searchCardFuzzy(
-                    name: cardName,
-                    number: ocrResult.cardNumber
-                )
+                // Map OCR detected language to CardLanguage for search
+                let detectedLanguage: CardLanguage?
+                switch ocrResult.detectedLanguage {
+                case .japanese:
+                    detectedLanguage = .japanese
+                case .chineseTraditional:
+                    detectedLanguage = .chineseTraditional
+                case .english:
+                    detectedLanguage = .english
+                }
+
+                if let name = cardName, !name.isEmpty {
+                    print("🔍 OCR detected: '\(name)' #\(cardNumber ?? "none") (language: \(ocrResult.detectedLanguage.rawValue))")
+                } else if let number = cardNumber {
+                    print("🔍 OCR detected number only: #\(number) (name recognition failed, will search by number)")
+                }
+
+                // 3. CARD RESOLUTION using CardResolver (handles exact lookup, FTS, and ambiguity)
+                await MainActor.run { scanProgress = .searchingDatabase }
+
+                var matches: [CardMatch] = []
+                let shouldUseLocal = await featureFlags.shouldUseLocalSearch
+                let dbReady = await localDB.isReady
+
+                if shouldUseLocal && dbReady {
+                    do {
+                        print("🔍 Using CardResolver for intelligent card resolution...")
+
+                        // Build resolver input
+                        let resolveInput = CardResolveInput(
+                            language: detectedLanguage,
+                            setCode: ocrResult.setCode,  // From OCR detection
+                            number: cardNumber,
+                            nameHint: cardName,
+                            ximilarConfidence: nil  // Could add Ximilar result here if available
+                        )
+
+                        // Resolve using CardResolver
+                        let resolution = try await CardResolver.shared.resolve(resolveInput)
+
+                        switch resolution {
+                        case .single(let match):
+                            // Single match found - proceed
+                            matches = [match.toCardMatch()]
+                            print("✅ CardResolver found single match: \(match.cardName)")
+
+                        case .ambiguous(let candidates, let reason, let sets):
+                            // Multiple candidates - show set picker UI
+                            print("❓ CardResolver found ambiguous results: \(reason)")
+                            await MainActor.run {
+                                self.ambiguousMatches = candidates
+                                self.suggestedSets = sets
+                                self.showAmbiguitySheet = true
+                            }
+                            return
+
+                        case .none(let reason):
+                            // No matches found
+                            print("❌ CardResolver found no matches: \(reason)")
+                            await MainActor.run {
+                                scanProgress = .noMatchesFound(cardName ?? cardNumber ?? "card")
+                            }
+                            await showErrorToast("No matches found. Try manual search.")
+                            return
+                        }
+                    } catch {
+                        print("⚠️ CardResolver failed: \(error.localizedDescription)")
+                        // Will fall back to remote API
+                    }
+                }
+
+                // 4. REMOTE API FALLBACK (only if local search found nothing and we have a valid name)
+                if matches.isEmpty && cardName != nil && !cardName!.isEmpty {
+                    print("🌐 Local DB empty, falling back to remote API...")
+
+                    // Use fuzzy search since OCR can have slight errors
+                    matches = try await pokemonService.searchCardFuzzy(name: cardName!, number: cardNumber)
+
+                    // Try exact search as backup if fuzzy returns nothing
+                    if matches.isEmpty {
+                        matches = try await pokemonService.searchCard(name: cardName!, number: cardNumber)
+                    }
+                }
 
                 guard let bestMatch = matches.first else {
-                    await showErrorToast("No cards found for '\(cardName)'. Try manual search.")
+                    let searchTerm = cardName ?? "#\(cardNumber ?? "unknown")"
+                    await MainActor.run { scanProgress = .noMatchesFound(searchTerm) }
+                    await showErrorToast("No cards found for '\(searchTerm)'. Try manual search.")
                     return
                 }
 
-                // 4. Add to scanned cards (pricing fetched automatically by manager)
+                // 5. Add to scanned cards (pricing fetched automatically by manager)
                 await MainActor.run {
                     scannedCardsManager.addCard(from: bestMatch)
                     HapticManager.shared.success()
-                }
-
-                // 5. Reset state
-                await MainActor.run {
-                    isProcessing = false
-                    processingStatus = ""
+                    scanProgress = .idle
                 }
 
             } catch {
                 await MainActor.run {
-                    isCapturing = false
-                    isProcessing = false
-                    processingStatus = ""
+                    scanProgress = .idle
                 }
-                await showErrorToast("Scan failed. Try again.")
+                await showErrorToast("Scan failed: \(error.localizedDescription)")
                 HapticManager.shared.error()
             }
         }
@@ -414,9 +626,9 @@ struct ScanView: View {
 
     @MainActor
     private func showErrorToast(_ message: String) async {
-        isCapturing = false
-        isProcessing = false
-        processingStatus = ""
+        // Reset to idle after showing error state briefly
+        try? await Task.sleep(for: .milliseconds(500))
+        scanProgress = .idle
 
         toastMessage = message
         withAnimation(.easeInOut(duration: 0.3)) {

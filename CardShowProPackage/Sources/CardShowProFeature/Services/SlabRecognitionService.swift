@@ -141,6 +141,7 @@ final class SlabRecognitionService: Sendable {
             cardName: mockData.cardName,
             setName: mockData.setName,
             cardNumber: mockData.cardNumber,
+            setCode: nil,  // Mock data doesn't have set code
             confidence: mockData.confidence,
             game: game,
             rarity: "Rare",
