@@ -151,6 +151,7 @@ struct CardEntryView: View {
             cardNumber: state.cardNumber,
             setName: setName,
             marketValue: finalPrice,
+            purchaseCost: state.purchasePrice, // Pre-filled from buy price calculator
             acquiredDate: Date(),
             imageData: nil, // We'll download the image in the future
             confidence: 1.0 // Manual entry = 100% confidence

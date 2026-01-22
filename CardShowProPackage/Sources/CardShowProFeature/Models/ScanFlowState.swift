@@ -23,6 +23,10 @@ final class ScanFlowState {
     var fetchedPrice: Double?
     var cardImageURL: URL?
 
+    /// Purchase price entered by seller (what they paid to acquire the card)
+    /// Pre-filled from ScannedCard.buyPrice when adding to inventory
+    var purchasePrice: Double?
+
     // Recent card names for quick entry
     var recentCardNames: [String] {
         get { UserDefaults.standard.stringArray(forKey: "recentCardNames") ?? [] }
@@ -78,14 +82,18 @@ public struct CardMatch: Identifiable, Sendable {
     public let setID: String
     public let cardNumber: String
     public let imageURL: URL?
+    public let marketPrice: Double?  // Extracted from search results for faster display
+    public let tcgplayerURL: String?  // For extracting TCGPlayer ID
 
-    public init(id: String, cardName: String, setName: String, setID: String, cardNumber: String, imageURL: URL?) {
+    public init(id: String, cardName: String, setName: String, setID: String, cardNumber: String, imageURL: URL?, marketPrice: Double? = nil, tcgplayerURL: String? = nil) {
         self.id = id
         self.cardName = cardName
         self.setName = setName
         self.setID = setID
         self.cardNumber = cardNumber
         self.imageURL = imageURL
+        self.marketPrice = marketPrice
+        self.tcgplayerURL = tcgplayerURL
     }
 }
 
