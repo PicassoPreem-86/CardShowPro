@@ -31,7 +31,7 @@ struct GradientSearchBar: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("Go back")
             }
@@ -40,7 +40,7 @@ struct GradientSearchBar: View {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(.gray.opacity(0.8))
 
                 TextField("Search card name...", text: $text)
                     .font(.system(size: 16))
@@ -50,7 +50,7 @@ struct GradientSearchBar: View {
                     .submitLabel(.search)
                     .onSubmit(onSubmit)
 
-                // Clear button when text exists
+                // Clear button when text exists OR dismiss when focused
                 if !text.isEmpty {
                     Button {
                         text = ""
@@ -58,9 +58,22 @@ struct GradientSearchBar: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 16))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(.gray.opacity(0.8))
                     }
+                    .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel("Clear search")
+                } else if isFocused {
+                    // Dismiss keyboard button when focused but no text
+                    Button {
+                        isFocused = false
+                        HapticManager.shared.light()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.gray.opacity(0.8))
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("Dismiss keyboard")
                 }
             }
             .padding(.horizontal, 14)
@@ -80,8 +93,11 @@ struct GradientSearchBar: View {
                         lineWidth: 2
                     )
             )
+            .fixedSize(horizontal: false, vertical: true) // Prevent vertical size changes
+            .animation(nil, value: isFocused) // Prevent default focus animation
         }
         .padding(.horizontal, 16)
+        .animation(nil, value: isFocused) // Prevent animation on the entire HStack
     }
 }
 

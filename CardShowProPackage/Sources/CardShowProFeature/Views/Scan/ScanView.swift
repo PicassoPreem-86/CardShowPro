@@ -67,13 +67,15 @@ struct ScanView: View {
 
     // Search state
     @State private var searchText: String = ""
+    @State private var isSearching = false
 
     // Camera state
     @State private var selectedFrameMode: FrameMode = .raw
-    @State private var selectedZoom: Double = 1.5
+    @State private var selectedZoom: Double = 2.0
 
     // Processing state (seamless flow with specific progress feedback)
     @State private var scanProgress: ScanProgress = .idle
+    @State private var scanTask: Task<Void, Never>?
 
     // UI state - false = camera large (default), true = recent scans expanded
     @State private var isRecentScansExpanded = false
@@ -85,14 +87,23 @@ struct ScanView: View {
     @State private var toastMessage: String?
     @State private var showToast = false
 
+    // Zoom indicator state
+    @State private var showZoomIndicator = false
+    @State private var currentZoomDisplay = "2x"
+
     // Error alert state
     @State private var errorMessage: String?
     @State private var showError = false
 
-    // NEW: Ambiguity handling state
+    // NEW: Ambiguity handling state (for scan results)
     @State private var ambiguousMatches: [LocalCardMatch] = []
     @State private var suggestedSets: [String] = []
     @State private var showAmbiguitySheet = false
+
+    // Search results state (for manual search)
+    @State private var searchResults: [LocalCardMatch] = []
+    @State private var lastSearchQuery: String = ""
+    @State private var showSearchResults = false
 
     init(showBackButton: Bool = false) {
         self.showBackButton = showBackButton
@@ -116,8 +127,7 @@ struct ScanView: View {
                     showBackButton: showBackButton,
                     onBack: { dismiss() },
                     onSubmit: {
-                        // Pre-fill search and open manual entry
-                        showManualEntry = true
+                        performSearch()
                     }
                 )
                 .padding(.top, 8)
@@ -132,12 +142,16 @@ struct ScanView: View {
             // Overlay: Recent scans sliding panel
             recentScansOverlay
 
-            // Toast overlay
-            if showToast, let message = toastMessage {
-                toastView(message: message)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(100)
+            // Toast overlay (positioned using safe area)
+            VStack {
+                if showToast, let message = toastMessage {
+                    toastView(message: message)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                Spacer()
             }
+            .zIndex(100)
         }
         .background(Color.black.ignoresSafeArea())
         .sheet(isPresented: $showManualEntry) {
@@ -148,11 +162,25 @@ struct ScanView: View {
                 candidates: ambiguousMatches,
                 suggestedSets: suggestedSets,
                 onSelect: { selectedCard in
-                    // User selected a card from the ambiguity sheet
+                    // User selected a card from the ambiguity sheet (scan disambiguation)
                     let cardMatch = selectedCard.toCardMatch()
                     scannedCardsManager.addCard(from: cardMatch)
                     HapticManager.shared.success()
                     scanProgress = .idle
+                    showAmbiguitySheet = false
+                }
+            )
+        }
+        .sheet(isPresented: $showSearchResults) {
+            SearchResultsSheet(
+                searchQuery: lastSearchQuery,
+                results: searchResults,
+                onSelect: { selectedCard in
+                    // User selected a card from search results
+                    let cardMatch = selectedCard.toCardMatch()
+                    scannedCardsManager.addCard(from: cardMatch)
+                    HapticManager.shared.success()
+                    showSearchResults = false
                 }
             )
         }
@@ -198,12 +226,28 @@ struct ScanView: View {
             let defaultZoom: Double
             switch newMode {
             case .raw, .graded:
-                defaultZoom = 1.5
-            case .bulk:
                 defaultZoom = 2.0
+            case .bulk:
+                defaultZoom = 3.0
             }
             selectedZoom = defaultZoom
             cameraManager.setZoom(defaultZoom)
+
+            // Show zoom indicator with haptic feedback
+            withAnimation(.easeOut(duration: 0.3)) {
+                currentZoomDisplay = "\(Int(defaultZoom))x"
+                showZoomIndicator = true
+            }
+
+            HapticManager.shared.medium()
+
+            // Auto-hide after 2 seconds
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation(.easeOut) {
+                    showZoomIndicator = false
+                }
+            }
         }
     }
 
@@ -230,16 +274,51 @@ struct ScanView: View {
                     )
                     .padding(12)
 
+                    // Zoom indicator (temporary badge on zoom change)
+                    if showZoomIndicator {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Text(currentZoomDisplay)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.black)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color(red: 0.5, green: 1.0, blue: 0.0))
+                                    .clipShape(Capsule())
+                                    .transition(.scale.combined(with: .opacity))
+                                    .padding(.top, 16)
+                                    .padding(.trailing, 16)
+                            }
+                            Spacer()
+                        }
+                    }
+
                     // Center instruction text (when idle)
                     if scanProgress == .idle {
-                        Text("Tap Anywhere to Scan")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.9))
+                        VStack(spacing: 8) {
+                            Image(systemName: "hand.tap.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(.white)
+
+                            Text("Tap to Scan Card")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.75))
+                                .shadow(color: .black.opacity(0.3), radius: 8)
+                        )
                     }
 
                     // Processing overlay
                     if scanProgress.isProcessing {
                         processingOverlay
+                            .accessibilityLabel(scanProgress.displayText)
+                            .accessibilityAddTraits(.updatesFrequently)
                     }
                 }
                 .frame(maxHeight: .infinity)
@@ -247,14 +326,12 @@ struct ScanView: View {
                 .onTapGesture {
                     captureAndProcess()
                 }
+                .accessibilityLabel("Camera viewfinder")
+                .accessibilityHint("Tap anywhere to scan a card")
+                .accessibilityAddTraits(.isButton)
 
                 // Bottom controls
                 VStack(spacing: 10) {
-                    // Zoom selector row (centered)
-                    ZoomSelector(selectedZoom: $selectedZoom) { zoom in
-                        cameraManager.setZoom(zoom)
-                    }
-
                     // Flash and Frame mode row
                     HStack {
                         // Flash toggle button
@@ -264,20 +341,21 @@ struct ScanView: View {
                                 HapticManager.shared.light()
                             } label: {
                                 HStack(spacing: 6) {
-                                    Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                                    Image(systemName: "bolt.fill")
                                         .font(.system(size: 14, weight: .medium))
 
                                     Text(cameraManager.isFlashOn ? "On" : "Off")
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 13, weight: .semibold))
                                 }
                                 .foregroundStyle(cameraManager.isFlashOn ? .black : .white)
                                 .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
+                                .padding(.vertical, 10)
                                 .background(
                                     Capsule()
                                         .fill(cameraManager.isFlashOn ? Color(red: 0.5, green: 1.0, blue: 0.0) : Color.white.opacity(0.2))
                                 )
                             }
+                            .frame(minHeight: 44)
                             .accessibilityLabel("Flash \(cameraManager.isFlashOn ? "on" : "off")")
                             .accessibilityHint("Tap to toggle flash")
                         }
@@ -298,27 +376,24 @@ struct ScanView: View {
 
     private var recentScansOverlay: some View {
         VStack(spacing: 0) {
-            // Drag handle / chevron
+            // Drag handle
             Button {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     isRecentScansExpanded.toggle()
                 }
                 HapticManager.shared.light()
             } label: {
-                VStack(spacing: 6) {
+                VStack(spacing: 0) {
                     // Pill drag indicator
                     RoundedRectangle(cornerRadius: 2.5)
-                        .fill(Color.gray.opacity(0.5))
+                        .fill(Color.gray.opacity(0.7))
                         .frame(width: 36, height: 5)
-
-                    Image(systemName: isRecentScansExpanded ? "chevron.down" : "chevron.up")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.gray)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
             }
+            .frame(minHeight: 44)
             .accessibilityLabel(isRecentScansExpanded ? "Collapse recent scans" : "Expand recent scans")
 
             // Recent scans content
@@ -418,21 +493,79 @@ struct ScanView: View {
     // MARK: - Processing Overlay
 
     private var processingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.6)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+        VStack(spacing: 16) {
+            // State-specific icon with animation
+            Image(systemName: iconForScanProgress(scanProgress))
+                .font(.system(size: 32, weight: .medium))
+                .foregroundStyle(Color(red: 0.5, green: 1.0, blue: 0.0))
+                .symbolEffect(.pulse, options: .repeating)
 
-            VStack(spacing: 12) {
-                ProgressView()
-                    .tint(Color(red: 0.5, green: 1.0, blue: 0.0))
-                    .scaleEffect(1.3)
-
+            VStack(spacing: 4) {
                 Text(scanProgress.displayText.isEmpty ? "Processing..." : scanProgress.displayText)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
+
+                // Optional subtitle for more detail
+                if let subtitle = subtitleForScanProgress(scanProgress) {
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
             }
+
+            // Cancel button
+            Button {
+                cancelScan()
+            } label: {
+                Text("Cancel")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color.white.opacity(0.15))
+                    )
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Cancel scan")
+            .accessibilityHint("Stops the current scan operation")
         }
-        .padding(12)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black.opacity(0.85))
+                .shadow(color: .black.opacity(0.5), radius: 20)
+        )
+    }
+
+    private func iconForScanProgress(_ progress: ScanProgress) -> String {
+        switch progress {
+        case .capturing:
+            return "camera.fill"
+        case .recognizingCard:
+            return "text.magnifyingglass"
+        case .searchingDatabase:
+            return "magnifyingglass"
+        case .cardNotRecognized, .noMatchesFound:
+            return "exclamationmark.triangle.fill"
+        case .idle:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    private func subtitleForScanProgress(_ progress: ScanProgress) -> String? {
+        switch progress {
+        case .capturing:
+            return "Hold steady"
+        case .recognizingCard:
+            return "Reading card text"
+        case .searchingDatabase:
+            return "Looking up details"
+        default:
+            return nil
+        }
     }
 
     // MARK: - Toast View
@@ -450,8 +583,7 @@ struct ScanView: View {
         .background(Color(white: 0.2))
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
-        .padding(.top, 100) // Position below status bar
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Camera Control
@@ -462,6 +594,61 @@ struct ScanView: View {
 
     private func stopCamera() {
         cameraManager.stopSession()
+    }
+
+    // MARK: - Search Flow
+
+    private func performSearch() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+
+        let searchQuery = query  // Capture for closure
+        isSearching = true
+        HapticManager.shared.light()
+
+        Task {
+            do {
+                // Ensure database is initialized
+                if await !localDB.isReady {
+                    try await localDB.initialize()
+                }
+
+                // Search local database for all matches
+                let matches = try await localDB.search(
+                    name: searchQuery,
+                    number: nil,
+                    limit: 200  // Show up to 200 cards
+                )
+
+                await MainActor.run {
+                    isSearching = false
+
+                    if matches.isEmpty {
+                        // No matches found - show error toast
+                        Task {
+                            await showErrorToast("No cards found for '\(searchQuery)'")
+                        }
+                    } else if matches.count == 1 {
+                        // Single match - add directly to scanned cards
+                        let cardMatch = matches[0].toCardMatch()
+                        scannedCardsManager.addCard(from: cardMatch)
+                        HapticManager.shared.success()
+                        searchText = ""  // Clear search after successful match
+                    } else {
+                        // Multiple matches - show search results sheet
+                        self.searchResults = matches
+                        self.lastSearchQuery = searchQuery  // Save query for sheet title
+                        self.showSearchResults = true
+                        searchText = ""  // Clear search when showing sheet
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isSearching = false
+                }
+                await showErrorToast("Search failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Seamless Capture Flow (OCR → Local DB Primary, Remote API Fallback)
@@ -475,10 +662,11 @@ struct ScanView: View {
         scanProgress = .capturing
         HapticManager.shared.medium()
 
-        Task {
+        scanTask = Task {
             do {
                 // 1. Capture photo
                 let originalImage = try await cameraManager.capturePhoto()
+                try Task.checkCancellation()
                 var image = originalImage
 
                 // 1b. OPTIONAL: Rectify image for better OCR accuracy
@@ -496,6 +684,7 @@ struct ScanView: View {
                 await MainActor.run { scanProgress = .recognizingCard }
 
                 var ocrResult = try await ocrService.recognizeText(from: image)
+                try Task.checkCancellation()
 
                 // 2b. FALLBACK: If rectified image failed to find card name, retry with original
                 // This helps with CJK cards where rectification downscaling loses detail
@@ -536,6 +725,7 @@ struct ScanView: View {
                 // 3. CARD RESOLUTION using CardResolver (handles exact lookup, FTS, and ambiguity)
                 await MainActor.run { scanProgress = .searchingDatabase }
 
+                try Task.checkCancellation()
                 var matches: [CardMatch] = []
                 let shouldUseLocal = await featureFlags.shouldUseLocalSearch
                 let dbReady = await localDB.isReady
@@ -573,13 +763,9 @@ struct ScanView: View {
                             return
 
                         case .none(let reason):
-                            // No matches found
-                            print("❌ CardResolver found no matches: \(reason)")
-                            await MainActor.run {
-                                scanProgress = .noMatchesFound(cardName ?? cardNumber ?? "card")
-                            }
-                            await showErrorToast("No matches found. Try manual search.")
-                            return
+                            // No matches found in local database - will fall back to remote API
+                            print("⚠️ CardResolver found no matches: \(reason) - will try remote API")
+                            // Don't return here - let it fall through to remote API fallback
                         }
                     } catch {
                         print("⚠️ CardResolver failed: \(error.localizedDescription)")
@@ -589,10 +775,12 @@ struct ScanView: View {
 
                 // 4. REMOTE API FALLBACK (only if local search found nothing and we have a valid name)
                 if matches.isEmpty && cardName != nil && !cardName!.isEmpty {
+                    try Task.checkCancellation()
                     print("🌐 Local DB empty, falling back to remote API...")
 
                     // Use fuzzy search since OCR can have slight errors
                     matches = try await pokemonService.searchCardFuzzy(name: cardName!, number: cardNumber)
+                    try Task.checkCancellation()
 
                     // Try exact search as backup if fuzzy returns nothing
                     if matches.isEmpty {
@@ -614,6 +802,11 @@ struct ScanView: View {
                     scanProgress = .idle
                 }
 
+            } catch is CancellationError {
+                // User cancelled - just reset to idle, no error
+                await MainActor.run {
+                    scanProgress = .idle
+                }
             } catch {
                 await MainActor.run {
                     scanProgress = .idle
@@ -622,6 +815,13 @@ struct ScanView: View {
                 HapticManager.shared.error()
             }
         }
+    }
+
+    private func cancelScan() {
+        scanTask?.cancel()
+        scanTask = nil
+        scanProgress = .idle
+        HapticManager.shared.light()
     }
 
     @MainActor

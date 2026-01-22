@@ -8,6 +8,7 @@ struct RecentScansSection: View {
     @Binding var isExpanded: Bool
     @State private var scannedCardsManager = ScannedCardsManager.shared
     @State private var selectedCard: ScannedCard?
+    @State private var showThumbnailStrip: Bool = true
     @Environment(\.modelContext) private var modelContext
 
     let onLoadPrevious: () -> Void
@@ -24,6 +25,12 @@ struct RecentScansSection: View {
                 expandedContent
             } else {
                 collapsedContent
+            }
+        }
+        .onChange(of: isExpanded) { oldValue, newValue in
+            // Reset thumbnail strip visibility when expanding/collapsing
+            if newValue {
+                showThumbnailStrip = true
             }
         }
         .fullScreenCover(item: $selectedCard) { card in
@@ -64,7 +71,7 @@ struct RecentScansSection: View {
                     .foregroundStyle(accentGreen)
                 Text("total")
                     .font(.system(size: 12))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(.gray.opacity(0.8))
             }
         }
         .padding(.horizontal, 16)
@@ -86,7 +93,7 @@ struct RecentScansSection: View {
     private var collapsedEmptyHint: some View {
         Text("Scanned cards will appear here")
             .font(.system(size: 13))
-            .foregroundStyle(.gray)
+            .foregroundStyle(.gray.opacity(0.8))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
     }
@@ -100,6 +107,8 @@ struct RecentScansSection: View {
                             selectedCard = card
                             HapticManager.shared.light()
                         }
+                        .accessibilityLabel("\(card.name), \(card.formattedPrice)")
+                        .accessibilityHint("Double tap to view details")
                 }
             }
             .padding(.horizontal, 16)
@@ -112,18 +121,81 @@ struct RecentScansSection: View {
     private var expandedContent: some View {
         Group {
             if scannedCardsManager.hasCards {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // Thumbnail strip at top when expanded too
+                VStack(spacing: 0) {
+                    // Thumbnail strip at top when expanded
+                    if showThumbnailStrip {
                         thumbnailStrip
                             .padding(.bottom, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
 
                         Divider()
                             .background(Color.white.opacity(0.1))
+                    }
+
+                    // List with swipe-to-delete support
+                    List {
+                        // Sentinel view to detect when we've scrolled past header
+                        Color.clear
+                            .frame(height: 1)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .onAppear {
+                                print("📜 Sentinel appeared - hiding thumbnails")
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showThumbnailStrip = false
+                                }
+                            }
+                            .onDisappear {
+                                print("📜 Sentinel disappeared - showing thumbnails")
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showThumbnailStrip = true
+                                }
+                            }
 
                         // Full card list
-                        scansList
+                        ForEach(scannedCardsManager.cards) { card in
+                            scanRow(card)
+                                .onTapGesture {
+                                    selectedCard = card
+                                    HapticManager.shared.light()
+                                }
+                                .listRowBackground(Color.clear)
+                                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                                .listRowSeparator(.hidden)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        withAnimation {
+                                            scannedCardsManager.removeCard(id: card.id)
+                                        }
+                                        HapticManager.shared.light()
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                        }
+
+                        // Clear all button
+                        if scannedCardsManager.count > 0 {
+                            Button {
+                                withAnimation {
+                                    scannedCardsManager.clearAll()
+                                }
+                                HapticManager.shared.light()
+                            } label: {
+                                Text("Clear All")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.red.opacity(0.8))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                        }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             } else {
                 expandedEmptyState
@@ -147,7 +219,7 @@ struct RecentScansSection: View {
 
             Text("Tap the camera area above to scan a card")
                 .font(.system(size: 14))
-                .foregroundStyle(.gray)
+                .foregroundStyle(.gray.opacity(0.8))
                 .multilineTextAlignment(.center)
 
             Spacer()
@@ -155,44 +227,7 @@ struct RecentScansSection: View {
         .padding(.horizontal, 32)
     }
 
-    // MARK: - Scans List (for expanded state)
-
-    private var scansList: some View {
-        LazyVStack(spacing: 0) {
-            ForEach(scannedCardsManager.cards) { card in
-                scanRow(card)
-                    .onTapGesture {
-                        selectedCard = card
-                        HapticManager.shared.light()
-                    }
-
-                if card.id != scannedCardsManager.cards.last?.id {
-                    Divider()
-                        .background(Color.white.opacity(0.1))
-                }
-            }
-
-            // Clear all button
-            if scannedCardsManager.count > 0 {
-                Button {
-                    withAnimation {
-                        scannedCardsManager.clearAll()
-                    }
-                    HapticManager.shared.light()
-                } label: {
-                    Text("Clear All")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.red.opacity(0.8))
-                        .padding(.vertical, 16)
-                }
-            }
-
-            // Bottom padding for safe area
-            Spacer()
-                .frame(height: 20)
-        }
-        .padding(.horizontal, 16)
-    }
+    // MARK: - Scan Row
 
     private func scanRow(_ card: ScannedCard) -> some View {
         HStack(spacing: 12) {
@@ -225,7 +260,7 @@ struct RecentScansSection: View {
 
                 Text(card.setName)
                     .font(.system(size: 12))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(.gray.opacity(0.8))
                     .lineLimit(1)
             }
 
@@ -245,7 +280,7 @@ struct RecentScansSection: View {
 
                 Text(card.timeAgo)
                     .font(.system(size: 11))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(.gray.opacity(0.8))
             }
 
             // Chevron for detail
@@ -264,7 +299,7 @@ struct RecentScansSection: View {
             .overlay(
                 Image(systemName: "photo")
                     .font(.system(size: 14))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(.gray.opacity(0.8))
             )
     }
 }
