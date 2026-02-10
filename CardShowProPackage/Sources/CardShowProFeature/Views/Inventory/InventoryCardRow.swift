@@ -14,6 +14,7 @@ struct InventoryCardRow: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 60, height: 80)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .accessibilityLabel("\(card.cardName) card image")
             } else {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(.systemGray5))
@@ -22,6 +23,7 @@ struct InventoryCardRow: View {
                         Image(systemName: "photo")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityHidden(true)
             }
 
             // Card Info
@@ -81,5 +83,6 @@ struct InventoryCardRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }

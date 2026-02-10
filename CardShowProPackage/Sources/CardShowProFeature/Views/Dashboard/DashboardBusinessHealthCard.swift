@@ -33,6 +33,8 @@ struct DashboardBusinessHealthCard: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Switch to \(selectedTab == "Overview" ? "Performance" : "Overview")")
+                .accessibilityHint("Toggles between Overview and Performance tabs")
 
                 Spacer()
 
@@ -195,6 +197,7 @@ struct DashboardBusinessHealthCard: View {
                         PeriodButton(title: period, isSelected: selectedPeriod == period) {
                             selectedPeriod = period
                         }
+                        .accessibilityAddTraits(selectedPeriod == period ? .isSelected : [])
                     }
                 }
                 .padding(.horizontal, 20)

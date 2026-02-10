@@ -95,6 +95,7 @@ struct PriceLookupResultsView: View {
                             .frame(maxWidth: 300)
                             .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
                             .shadow(radius: 8)
+                            .accessibilityLabel("\(match.cardName) card image")
 
                     case .failure:
                         VStack(spacing: DesignSystem.Spacing.sm) {
@@ -181,6 +182,7 @@ struct PriceLookupResultsView: View {
         .padding(DesignSystem.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - JustTCG Condition Pricing Section

@@ -228,5 +228,8 @@ struct ToolRow: View {
         .contentShape(Rectangle())
         .opacity(isComingSoon ? 0.6 : 1.0)
         .allowsHitTesting(!isComingSoon)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isComingSoon ? "\(title), Coming soon" : title)
+        .accessibilityHint(description)
     }
 }

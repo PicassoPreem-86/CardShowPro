@@ -89,6 +89,7 @@ struct ScannedCardDetailView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.white)
                     }
+                    .accessibilityLabel("Back")
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -100,6 +101,7 @@ struct ScannedCardDetailView: View {
                                 .font(.system(size: 16))
                                 .foregroundStyle(.white)
                         }
+                        .accessibilityLabel("Bookmark")
 
                         Button {
                             shareCard()
@@ -108,6 +110,7 @@ struct ScannedCardDetailView: View {
                                 .font(.system(size: 16))
                                 .foregroundStyle(.white)
                         }
+                        .accessibilityLabel("Share card")
                     }
                 }
             }

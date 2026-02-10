@@ -16,6 +16,7 @@ struct InventoryCardGridItem: View {
                         .frame(height: 180)
                         .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .accessibilityLabel("\(card.cardName) card image")
                 } else {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
@@ -99,5 +100,6 @@ struct InventoryCardGridItem: View {
         .background(DesignSystem.Colors.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 5)
+        .accessibilityElement(children: .combine)
     }
 }

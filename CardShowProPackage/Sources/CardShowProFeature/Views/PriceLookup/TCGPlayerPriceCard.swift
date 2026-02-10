@@ -96,5 +96,7 @@ struct TCGPlayerPriceCard: View {
             RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
                 .stroke(DesignSystem.Colors.borderSecondary, lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(variantName), Market: \(pricing.market.map { "$\(String(format: "%.2f", $0))" } ?? "unavailable")")
     }
 }

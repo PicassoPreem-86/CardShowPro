@@ -31,6 +31,7 @@ struct PriceLookupMatchSheet: View {
                                             .frame(width: 100, height: 140)
                                             .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm))
                                             .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                            .accessibilityLabel("\(match.cardName) card image")
 
                                     case .failure:
                                         VStack(spacing: DesignSystem.Spacing.xxxs) {

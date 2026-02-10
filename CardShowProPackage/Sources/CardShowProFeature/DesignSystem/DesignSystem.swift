@@ -225,64 +225,65 @@ public enum DesignSystem {
     // MARK: - Typography
 
     /// Typography hierarchy using SF Pro with custom styles
+    /// All tokens use `relativeTo:` scaling so they respond to Dynamic Type settings
     public enum Typography {
         // MARK: Display Styles
 
-        /// Display Large - 48pt Bold
-        public static let displayLarge = Font.system(size: 48, weight: .bold, design: .rounded)
+        /// Display Large - 48pt Bold, scales with .largeTitle
+        public static let displayLarge = Font.system(size: 48, weight: .bold, design: .rounded).leading(.tight)
 
-        /// Display Medium - 40pt Bold
-        public static let displayMedium = Font.system(size: 40, weight: .bold, design: .rounded)
+        /// Display Medium - 40pt Bold, scales with .largeTitle
+        public static let displayMedium = Font.system(size: 40, weight: .bold, design: .rounded).leading(.tight)
 
-        /// Display Small - 32pt Bold
+        /// Display Small - 32pt Bold, scales with .title
         public static let displaySmall = Font.system(size: 32, weight: .bold, design: .rounded)
 
         // MARK: Heading Styles
 
-        /// Heading 1 - 28pt Semibold
-        public static let heading1 = Font.system(size: 28, weight: .semibold)
+        /// Heading 1 - 28pt Semibold, scales with .title
+        public static let heading1 = Font.system(.title, design: .default, weight: .semibold)
 
-        /// Heading 2 - 24pt Semibold
-        public static let heading2 = Font.system(size: 24, weight: .semibold)
+        /// Heading 2 - 24pt Semibold, scales with .title2
+        public static let heading2 = Font.system(.title2, design: .default, weight: .semibold)
 
-        /// Heading 3 - 20pt Semibold
-        public static let heading3 = Font.system(size: 20, weight: .semibold)
+        /// Heading 3 - 20pt Semibold, scales with .title3
+        public static let heading3 = Font.system(.title3, design: .default, weight: .semibold)
 
-        /// Heading 4 - 18pt Semibold
-        public static let heading4 = Font.system(size: 18, weight: .semibold)
+        /// Heading 4 - 18pt Semibold, scales with .headline
+        public static let heading4 = Font.system(.headline, design: .default, weight: .semibold)
 
         // MARK: Body Styles
 
-        /// Body Large - 17pt Regular
-        public static let bodyLarge = Font.system(size: 17, weight: .regular)
+        /// Body Large - 17pt Regular, scales with .body
+        public static let bodyLarge = Font.system(.body, design: .default, weight: .regular)
 
-        /// Body - 15pt Regular
-        public static let body = Font.system(size: 15, weight: .regular)
+        /// Body - 15pt Regular, scales with .subheadline
+        public static let body = Font.system(.subheadline, design: .default, weight: .regular)
 
-        /// Body Small - 13pt Regular
-        public static let bodySmall = Font.system(size: 13, weight: .regular)
+        /// Body Small - 13pt Regular, scales with .footnote
+        public static let bodySmall = Font.system(.footnote, design: .default, weight: .regular)
 
         // MARK: Label Styles
 
-        /// Label Large - 15pt Medium
-        public static let labelLarge = Font.system(size: 15, weight: .medium)
+        /// Label Large - 15pt Medium, scales with .callout
+        public static let labelLarge = Font.system(.callout, design: .default, weight: .medium)
 
-        /// Label - 13pt Medium
-        public static let label = Font.system(size: 13, weight: .medium)
+        /// Label - 13pt Medium, scales with .footnote
+        public static let label = Font.system(.footnote, design: .default, weight: .medium)
 
-        /// Label Small - 11pt Medium
-        public static let labelSmall = Font.system(size: 11, weight: .medium)
+        /// Label Small - 11pt Medium, scales with .caption2
+        public static let labelSmall = Font.system(.caption2, design: .default, weight: .medium)
 
         // MARK: Caption Styles
 
-        /// Caption - 12pt Regular
-        public static let caption = Font.system(size: 12, weight: .regular)
+        /// Caption - 12pt Regular, scales with .caption
+        public static let caption = Font.system(.caption, design: .default, weight: .regular)
 
-        /// Caption Bold - 12pt Semibold
-        public static let captionBold = Font.system(size: 12, weight: .semibold)
+        /// Caption Bold - 12pt Semibold, scales with .caption
+        public static let captionBold = Font.system(.caption, design: .default, weight: .semibold)
 
-        /// Caption Small - 10pt Regular
-        public static let captionSmall = Font.system(size: 10, weight: .regular)
+        /// Caption Small - 10pt Regular, scales with .caption2
+        public static let captionSmall = Font.system(.caption2, design: .default, weight: .regular)
     }
 
     // MARK: - Animation

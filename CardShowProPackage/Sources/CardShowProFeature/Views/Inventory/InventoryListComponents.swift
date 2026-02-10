@@ -21,6 +21,7 @@ struct CategoryPill: View {
             .foregroundStyle(isSelected ? .white : .primary)
             .clipShape(Capsule())
         }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -58,6 +59,8 @@ struct ProfitBadge: View {
         .padding(.vertical, 3)
         .background(profitColor.opacity(0.15))
         .clipShape(Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(profit >= 0 ? "Profit" : "Loss") $\(String(format: "%.0f", abs(profit))), \(String(format: "%.0f", roi))% ROI")
     }
 }
 
@@ -80,6 +83,7 @@ struct InventoryStatBox: View {
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 

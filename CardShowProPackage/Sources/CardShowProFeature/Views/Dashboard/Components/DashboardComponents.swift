@@ -31,6 +31,7 @@ struct QuickActionButton: View {
             .scaleEffect(isPressed ? 0.97 : 1.0)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -76,6 +77,7 @@ struct StatsCard: View {
         }
         .padding(DesignSystem.Spacing.md)
         .cardStyle()
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -108,6 +110,7 @@ struct BusinessMetricCard: View {
         .background(DesignSystem.Colors.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 5)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -138,6 +141,7 @@ struct EventMetricCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(DesignSystem.Spacing.md)
         .cardStyle()
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -187,6 +191,7 @@ struct PerformerCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(DesignSystem.Spacing.md)
         .cardStyle()
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -262,6 +267,7 @@ struct TabButton: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -284,6 +290,7 @@ struct PeriodButton: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -383,5 +390,7 @@ struct MarketMoverCard: View {
         }
         .frame(width: 130)
         .premiumCardStyle()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(cardName), \(setName), \(currentPrice), \(isPositive ? "up" : "down") \(percentChange)")
     }
 }
