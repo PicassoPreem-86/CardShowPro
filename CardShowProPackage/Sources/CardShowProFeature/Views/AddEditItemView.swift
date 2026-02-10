@@ -275,9 +275,9 @@ struct AddEditItemView: View {
                 cardName: cardName.trimmingCharacters(in: .whitespaces),
                 cardNumber: cardNumber.trimmingCharacters(in: .whitespaces),
                 setName: setName.trimmingCharacters(in: .whitespaces),
-                marketValue: marketVal,
-                imageData: selectedImage?.pngData(),
-                confidence: 1.0 // Manual entry = 100% confidence
+                estimatedValue: marketVal,
+                confidence: 1.0, // Manual entry = 100% confidence
+                imageData: selectedImage?.pngData()
             )
             modelContext.insert(newCard)
         }

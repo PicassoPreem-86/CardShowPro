@@ -210,14 +210,16 @@ struct AddCardSuccessView: View {
         cardName: "Pikachu",
         cardNumber: "25",
         setName: "Base Set",
-        marketValue: 150.00
+        estimatedValue: 150.00,
+        confidence: 1.0
     )
 
     let card2 = InventoryCard(
         cardName: "Charizard",
         cardNumber: "4",
         setName: "Base Set",
-        marketValue: 500.00
+        estimatedValue: 500.00,
+        confidence: 1.0
     )
 
     // Insert cards into context
@@ -226,7 +228,7 @@ struct AddCardSuccessView: View {
         container.mainContext.insert(card2)
     }()
 
-    return AddCardSuccessView(card: card1, state: state)
+    AddCardSuccessView(card: card1, state: state)
         .modelContainer(container)
         .environment(appState)
 }

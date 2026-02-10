@@ -8,12 +8,14 @@ struct RecentScansSection: View {
     @Binding var isExpanded: Bool
     @State private var scannedCardsManager = ScannedCardsManager.shared
     @State private var selectedCard: ScannedCard?
+    @State private var scrollOffset: CGFloat = 0
     @State private var showThumbnailStrip: Bool = true
     @Environment(\.modelContext) private var modelContext
 
     let onLoadPrevious: () -> Void
 
     private let accentGreen = Color(red: 0.5, green: 1.0, blue: 0.0)
+    private let thumbnailStripHeight: CGFloat = 120 // Approximate height of thumbnail strip
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,84 +123,50 @@ struct RecentScansSection: View {
     private var expandedContent: some View {
         Group {
             if scannedCardsManager.hasCards {
-                VStack(spacing: 0) {
-                    // Thumbnail strip at top when expanded
-                    if showThumbnailStrip {
-                        thumbnailStrip
-                            .padding(.bottom, 8)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Thumbnail strip at top when expanded (hides on scroll)
+                        if showThumbnailStrip {
+                            thumbnailStrip
+                                .padding(.bottom, 8)
+                                .transition(.move(edge: .top).combined(with: .opacity))
 
-                        Divider()
-                            .background(Color.white.opacity(0.1))
-                    }
-
-                    // List with swipe-to-delete support
-                    List {
-                        // Sentinel view to detect when we've scrolled past header
-                        Color.clear
-                            .frame(height: 1)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                            .onAppear {
-                                print("📜 Sentinel appeared - hiding thumbnails")
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showThumbnailStrip = false
-                                }
-                            }
-                            .onDisappear {
-                                print("📜 Sentinel disappeared - showing thumbnails")
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showThumbnailStrip = true
-                                }
-                            }
+                            Divider()
+                                .background(Color.white.opacity(0.1))
+                        }
 
                         // Full card list
-                        ForEach(scannedCardsManager.cards) { card in
-                            scanRow(card)
-                                .onTapGesture {
-                                    selectedCard = card
-                                    HapticManager.shared.light()
+                        scansList
+                            .background(
+                                GeometryReader { geometry in
+                                    Color.clear.preference(
+                                        key: ScrollOffsetPreferenceKey.self,
+                                        value: geometry.frame(in: .named("scroll")).minY
+                                    )
                                 }
-                                .listRowBackground(Color.clear)
-                                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                                .listRowSeparator(.hidden)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        withAnimation {
-                                            scannedCardsManager.removeCard(id: card.id)
-                                        }
-                                        HapticManager.shared.light()
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                        }
-
-                        // Clear all button
-                        if scannedCardsManager.count > 0 {
-                            Button {
-                                withAnimation {
-                                    scannedCardsManager.clearAll()
-                                }
-                                HapticManager.shared.light()
-                            } label: {
-                                Text("Clear All")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.red.opacity(0.8))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
-                            }
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                        }
+                            )
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                }
+                .coordinateSpace(name: "scroll")
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+                    handleScrollOffset(value)
                 }
             } else {
                 expandedEmptyState
+            }
+        }
+    }
+
+    private func handleScrollOffset(_ offset: CGFloat) {
+        // Hide thumbnail strip when scrolled up (negative offset means scrolling down/content moving up)
+        // Show it when near top
+        withAnimation(.easeInOut(duration: 0.25)) {
+            if offset < -50 {
+                // Scrolled up significantly - hide thumbnails
+                showThumbnailStrip = false
+            } else if offset > -20 {
+                // Near top - show thumbnails
+                showThumbnailStrip = true
             }
         }
     }
@@ -227,7 +195,44 @@ struct RecentScansSection: View {
         .padding(.horizontal, 32)
     }
 
-    // MARK: - Scan Row
+    // MARK: - Scans List (for expanded state)
+
+    private var scansList: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(scannedCardsManager.cards) { card in
+                scanRow(card)
+                    .onTapGesture {
+                        selectedCard = card
+                        HapticManager.shared.light()
+                    }
+
+                if card.id != scannedCardsManager.cards.last?.id {
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                }
+            }
+
+            // Clear all button
+            if scannedCardsManager.count > 0 {
+                Button {
+                    withAnimation {
+                        scannedCardsManager.clearAll()
+                    }
+                    HapticManager.shared.light()
+                } label: {
+                    Text("Clear All")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.red.opacity(0.8))
+                        .padding(.vertical, 16)
+                }
+            }
+
+            // Bottom padding for safe area
+            Spacer()
+                .frame(height: 20)
+        }
+        .padding(.horizontal, 16)
+    }
 
     private func scanRow(_ card: ScannedCard) -> some View {
         HStack(spacing: 12) {
@@ -301,6 +306,17 @@ struct RecentScansSection: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.gray.opacity(0.8))
             )
+    }
+}
+
+// MARK: - Scroll Offset Tracking
+
+/// PreferenceKey for tracking scroll offset
+struct ScrollOffsetPreferenceKey: PreferenceKey {
+    nonisolated(unsafe) static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

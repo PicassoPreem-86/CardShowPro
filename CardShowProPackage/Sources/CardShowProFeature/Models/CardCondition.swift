@@ -1,40 +1,24 @@
 import Foundation
 
-/// Card condition with corresponding price multipliers
-public enum CardCondition: String, CaseIterable, Sendable {
+/// Card condition grades based on TCGPlayer grading standards
+enum CardCondition: String, CaseIterable, Sendable {
     case mint = "Mint"
     case nearMint = "Near Mint"
-    case excellent = "Excellent"
-    case good = "Good"
-    case played = "Played"
-    case poor = "Poor"
+    case excellent = "Lightly Played"
+    case good = "Moderately Played"
+    case played = "Heavily Played"
+    case poor = "Damaged"
 
-    /// Price multiplier based on condition
-    var multiplier: Double {
+    /// Price multipliers based on TCGPlayer market research (January 2025)
+    /// Near Mint is baseline (1.0x), other conditions are percentage reductions
+    var priceMultiplier: Double {
         switch self {
-        case .mint: return 1.2        // 20% premium for mint
-        case .nearMint: return 1.0    // Baseline (market price)
-        case .excellent: return 0.9   // 10% discount
-        case .good: return 0.75       // 25% discount
-        case .played: return 0.6      // 40% discount
-        case .poor: return 0.4        // 60% discount
-        }
-    }
-
-    /// User-friendly display name
-    var displayName: String {
-        rawValue
-    }
-
-    /// SF Symbol icon for each condition
-    var icon: String {
-        switch self {
-        case .mint: return "star.circle.fill"
-        case .nearMint: return "star.circle"
-        case .excellent: return "checkmark.circle.fill"
-        case .good: return "checkmark.circle"
-        case .played: return "circle.dotted"
-        case .poor: return "xmark.circle"
+        case .mint: return 1.15           // Premium for pristine cards (15% above NM)
+        case .nearMint: return 1.0        // Baseline - TCGPlayer standard
+        case .excellent: return 0.80      // Lightly Played - 20% reduction
+        case .good: return 0.60           // Moderately Played - 40% reduction
+        case .played: return 0.30         // Heavily Played - 70% reduction
+        case .poor: return 0.15           // Damaged - 85% reduction
         }
     }
 }

@@ -315,7 +315,7 @@ private struct SummaryRow: View {
         roiPercent: 38.33
     )
 
-    return ProfitResultCard(result: result)
+    ProfitResultCard(result: result)
         .padding()
         .background(DesignSystem.Colors.backgroundPrimary)
 }
@@ -337,7 +337,7 @@ private struct SummaryRow: View {
         roiPercent: -29.29
     )
 
-    return ProfitResultCard(result: result)
+    ProfitResultCard(result: result)
         .padding()
         .background(DesignSystem.Colors.backgroundPrimary)
 }

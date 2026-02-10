@@ -1,13 +1,16 @@
 import Foundation
 
-/// Trading card variants (simplified for vendor speed)
+/// Trading card variants (foil types, special editions)
 enum CardVariant: String, CaseIterable, Sendable {
     case standard = "Standard"
     case holo = "Holo"
     case reverseHolo = "Reverse Holo"
-    case promo = "Promo"
-    case fullArt = "Full Art"
-    case special = "Special"
+    case firstEdition = "1st Edition"
+    case shadowless = "Shadowless"
+    case pokemonCenter = "Pokemon Center"
+    case pokeball = "Pokeball"
+    case masterball = "Master Ball"
+    case goldStar = "Gold Star"
 
     var displayName: String { rawValue }
 
@@ -16,20 +19,12 @@ enum CardVariant: String, CaseIterable, Sendable {
         case .standard: return 1.0
         case .holo: return 1.5
         case .reverseHolo: return 1.3
-        case .promo: return 2.0
-        case .fullArt: return 3.0
-        case .special: return 2.5  // Covers: Gold Star, Secret Rare, Alt Art, etc.
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .standard: return "rectangle"
-        case .holo: return "sparkles"
-        case .reverseHolo: return "arrow.triangle.2.circlepath"
-        case .promo: return "star.circle"
-        case .fullArt: return "photo"
-        case .special: return "star.fill"
+        case .firstEdition: return 3.0
+        case .shadowless: return 4.0
+        case .pokemonCenter: return 2.0
+        case .pokeball: return 1.8
+        case .masterball: return 2.5
+        case .goldStar: return 10.0
         }
     }
 }

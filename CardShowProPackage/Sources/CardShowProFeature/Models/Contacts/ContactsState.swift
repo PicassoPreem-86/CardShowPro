@@ -1,73 +1,28 @@
 import Foundation
 import Observation
 
-/// Filter options for contacts list
-enum ContactFilter: String, CaseIterable, Sendable {
-    case all = "All"
-    case customers = "Customers"
-    case vendors = "Vendors"
-    case suppliers = "Suppliers"
-    case leads = "Leads"
-    case vip = "VIP"
-    case needsAttention = "Needs Attention"
-}
-
 /// Observable state container for Contacts Management feature
 @Observable
 @MainActor
 final class ContactsState: Sendable {
     var contacts: [Contact]
     var searchText: String = ""
-    var selectedFilter: ContactFilter = .all
-    var selectedPriority: ContactPriority?
 
     init(contacts: [Contact] = Contact.mockContacts) {
         self.contacts = contacts
     }
 
-    /// Filtered and sorted contacts based on search text, filter, and priority
+    /// Filtered and sorted contacts based on search text
     var filteredContacts: [Contact] {
-        var filtered = contacts
-
-        // Apply contact type filter
-        switch selectedFilter {
-        case .all:
-            break // No filtering
-        case .customers:
-            filtered = filtered.filter { $0.contactTypeEnum == .customer }
-        case .vendors:
-            filtered = filtered.filter { $0.contactTypeEnum == .vendor }
-        case .suppliers:
-            filtered = filtered.filter { $0.contactTypeEnum == .supplier }
-        case .leads:
-            filtered = filtered.filter { $0.contactTypeEnum == .lead }
-        case .vip:
-            filtered = filtered.filter { $0.priorityEnum == .vip }
-        case .needsAttention:
-            // Contacts not contacted in last 30 days or never contacted
-            let thirtyDaysAgo = Date().addingTimeInterval(-86400 * 30)
-            filtered = filtered.filter { contact in
-                if let lastContacted = contact.lastContactedAt {
-                    return lastContacted < thirtyDaysAgo
-                } else {
-                    return true // Never contacted
-                }
-            }
-        }
-
-        // Apply priority filter if selected
-        if let priority = selectedPriority {
-            filtered = filtered.filter { $0.priorityEnum == priority }
-        }
-
-        // Apply search text filter
-        if !searchText.isEmpty {
+        let filtered: [Contact]
+        if searchText.isEmpty {
+            filtered = contacts
+        } else {
             let searchLower = searchText.lowercased()
-            filtered = filtered.filter { contact in
+            filtered = contacts.filter { contact in
                 contact.name.lowercased().contains(searchLower) ||
                 contact.phone?.contains(searchText) == true ||
-                contact.email?.lowercased().contains(searchLower) == true ||
-                contact.tags.contains(where: { $0.lowercased().contains(searchLower) })
+                contact.email?.lowercased().contains(searchLower) == true
             }
         }
 
@@ -102,13 +57,8 @@ final class ContactsState: Sendable {
 
     /// Update last contacted timestamp for a contact
     func markAsContacted(_ contact: Contact) {
-        contact.lastContactedAt = Date()
-    }
-
-    /// Reset all filters to default
-    func resetFilters() {
-        searchText = ""
-        selectedFilter = .all
-        selectedPriority = nil
+        var updatedContact = contact
+        updatedContact.lastContactedAt = Date()
+        updateContact(updatedContact)
     }
 }

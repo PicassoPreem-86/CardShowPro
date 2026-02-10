@@ -8,7 +8,6 @@ struct ContactDetailView: View {
 
     @State private var showingEditSheet = false
     @State private var showingDeleteAlert = false
-    @State private var showingWantList = false
 
     var body: some View {
         ScrollView {
@@ -30,11 +29,6 @@ struct ContactDetailView: View {
 
                 // Contact Information
                 contactInfoSection
-
-                // Want List Summary
-                WantListSummaryCard(contact: contact) {
-                    showingWantList = true
-                }
 
                 // Notes
                 if let notes = contact.notes, !notes.isEmpty {
@@ -80,9 +74,6 @@ struct ContactDetailView: View {
             }
         } message: {
             Text("Are you sure you want to delete \(contact.name)? This action cannot be undone.")
-        }
-        .navigationDestination(isPresented: $showingWantList) {
-            WantListView(contact: contact)
         }
     }
 

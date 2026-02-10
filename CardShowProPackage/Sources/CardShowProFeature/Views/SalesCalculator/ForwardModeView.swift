@@ -289,12 +289,14 @@ private struct CostInputField: View {
     @Previewable @State var model = SalesCalculatorModel()
     @Previewable @FocusState var focusedField: SalesCalculatorView.Field?
 
-    model.salePrice = 100.00
-    model.itemCost = 50.00
-    model.shippingCost = 5.00
-    model.suppliesCost = 2.00
+    let _ = {
+        model.salePrice = 100.00
+        model.itemCost = 50.00
+        model.shippingCost = 5.00
+        model.suppliesCost = 2.00
+    }()
 
-    return ScrollView {
+    ScrollView {
         ForwardModeView(model: model, focusedField: $focusedField)
     }
     .background(DesignSystem.Colors.backgroundPrimary)

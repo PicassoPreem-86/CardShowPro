@@ -1,65 +1,55 @@
 import Foundation
 import SwiftUI
 
-#if canImport(UIKit)
-import UIKit
-#endif
-
 // MARK: - Calculator Modes
-enum CalculatorMode: Hashable, Sendable {
-    case forward  // "What Profit?" - Input sale price, output profit
-    case reverse  // "What Price?" - Input desired profit, output sale price
+
+enum CalculatorMode: String, Sendable {
+    case forward  // "What Profit?" - Input sale price, calculate profit
+    case reverse  // "What Price?" - Input desired profit, calculate price
 }
 
-// MARK: - Profit Modes (for Reverse Mode)
 enum ProfitMode: Hashable, Sendable {
     case fixedAmount(Decimal)
     case percentage(Double)
 }
 
-// MARK: - Profit Status
+// MARK: - Calculation Results
+
+/// Profit status classification
 enum ProfitStatus: Sendable {
     case profitable
     case breakeven
     case loss
 }
 
-// MARK: - Forward Calculation Result
+/// Result for Forward Mode (known sale price → calculate profit)
 struct ForwardCalculationResult: Sendable {
-    // Revenue
     let salePrice: Decimal
-
-    // Costs
     let itemCost: Decimal
     let shippingCost: Decimal
     let suppliesCost: Decimal
     let totalCosts: Decimal
-
-    // Fees
     let platformFee: Decimal
     let platformFeePercentage: Double
     let paymentFee: Decimal
     let paymentFeePercentage: Double
     let totalFees: Decimal
-
-    // Profit Metrics
     let netProfit: Decimal
-    let profitMarginPercent: Double  // Profit / Sale Price
-    let roiPercent: Double            // Profit / Total Costs
-
-    // Status
-    var isProfitable: Bool {
-        netProfit > 0
-    }
+    let profitMarginPercent: Double
+    let roiPercent: Double
 
     var profitStatus: ProfitStatus {
         if netProfit > 0 { return .profitable }
-        if netProfit == 0 { return .breakeven }
-        return .loss
+        if netProfit < 0 { return .loss }
+        return .breakeven
+    }
+
+    var isProfitable: Bool {
+        netProfit > 0
     }
 }
 
-// MARK: - Reverse Calculation Result (Legacy)
+/// Result for Reverse Mode (desired profit → calculate sale price)
 struct CalculationResult: Sendable {
     let listPrice: Decimal
     let platformFee: Decimal
@@ -72,54 +62,41 @@ struct CalculationResult: Sendable {
     let profitMarginPercent: Double
 }
 
+// MARK: - Model
+
 @Observable
 @MainActor
 final class SalesCalculatorModel {
-    // Mode Selection
+    // Mode
     var mode: CalculatorMode = .forward
 
-    // Forward Mode Inputs
+    // Forward Mode inputs
     var salePrice: Decimal = 0.00
     var itemCost: Decimal = 0.00
-    var shippingCost: Decimal = 0.00
     var suppliesCost: Decimal = 0.00
 
-    // Reverse Mode Inputs (Legacy)
-    var cardCost: Decimal = 0.00
-    var profitMode: ProfitMode = .percentage(0.20)
-
-    // Shared Settings
+    // Shared inputs
+    var shippingCost: Decimal = 0.00
     var selectedPlatform: SellingPlatform = .ebay
     var showPlatformPicker = false
 
-    // Legacy property for reverse mode
-    var calculationResult: CalculationResult {
-        calculateSalesPrice()
-    }
+    // Reverse Mode inputs (legacy)
+    var cardCost: Decimal = 0.00
+    var profitMode: ProfitMode = .percentage(0.20)
 
-    // MARK: - Forward Calculation (Price → Profit)
+    // MARK: - Forward Mode Calculation
+
+    /// Calculate profit from known sale price (Forward Mode)
     func calculateProfit() -> ForwardCalculationResult {
         let fees = selectedPlatform.feeStructure
+        let totalCosts = itemCost + shippingCost + suppliesCost
 
-        // Calculate fees based on sale price
         let platformFee = salePrice * Decimal(fees.platformFeePercentage)
         let paymentFee = (salePrice * Decimal(fees.paymentFeePercentage)) + Decimal(fees.paymentFeeFixed)
         let totalFees = platformFee + paymentFee
-
-        // Calculate costs
-        let totalCosts = itemCost + shippingCost + suppliesCost
-
-        // Calculate profit
         let netProfit = salePrice - totalCosts - totalFees
-
-        // Calculate metrics
-        let profitMargin = salePrice > 0
-            ? Double(truncating: ((netProfit / salePrice) * 100) as NSNumber)
-            : 0
-
-        let roi = totalCosts > 0
-            ? Double(truncating: ((netProfit / totalCosts) * 100) as NSNumber)
-            : 0
+        let profitMarginPercent = salePrice > 0 ? Double(truncating: ((netProfit / salePrice) * 100) as NSNumber) : 0
+        let roiPercent = totalCosts > 0 ? Double(truncating: ((netProfit / totalCosts) * 100) as NSNumber) : 0
 
         return ForwardCalculationResult(
             salePrice: salePrice,
@@ -133,12 +110,18 @@ final class SalesCalculatorModel {
             paymentFeePercentage: fees.paymentFeePercentage,
             totalFees: totalFees,
             netProfit: netProfit,
-            profitMarginPercent: profitMargin,
-            roiPercent: roi
+            profitMarginPercent: profitMarginPercent,
+            roiPercent: roiPercent
         )
     }
 
-    // MARK: - Reverse Calculation (Profit → Price) - Legacy
+    // MARK: - Reverse Mode Calculation
+
+    /// Calculate recommended sale price from desired profit (Reverse Mode)
+    var calculationResult: CalculationResult {
+        calculateSalesPrice()
+    }
+
     private func calculateSalesPrice() -> CalculationResult {
         let fees = selectedPlatform.feeStructure
         let totalCost = cardCost + shippingCost
@@ -151,8 +134,6 @@ final class SalesCalculatorModel {
             desiredProfit = cardCost * Decimal(percent)
         }
 
-        // Reverse-engineer list price from desired profit
-        // Formula: ListPrice = (Cost + Profit + FixedFees) / (1 - PlatformFee% - PaymentFee%)
         let totalFeePercentage = fees.platformFeePercentage + fees.paymentFeePercentage
         let numerator = totalCost + desiredProfit + Decimal(fees.paymentFeeFixed)
         let denominator = 1.0 - Decimal(totalFeePercentage)
@@ -185,30 +166,23 @@ final class SalesCalculatorModel {
         )
     }
 
+    // MARK: - Actions
+
     func setMarginPreset(_ percent: Double) {
         profitMode = .percentage(percent)
     }
 
     func reset() {
-        // Reset forward mode inputs
         salePrice = 0.00
         itemCost = 0.00
-        shippingCost = 0.00
         suppliesCost = 0.00
-
-        // Reset reverse mode inputs
         cardCost = 0.00
+        shippingCost = 0.00
         profitMode = .percentage(0.20)
-    }
-
-    func switchMode(to newMode: CalculatorMode) {
-        mode = newMode
-        reset()
+        mode = .forward
     }
 
     func copyListPrice() {
-        #if os(iOS)
         UIPasteboard.general.string = calculationResult.listPrice.asCurrency
-        #endif
     }
 }

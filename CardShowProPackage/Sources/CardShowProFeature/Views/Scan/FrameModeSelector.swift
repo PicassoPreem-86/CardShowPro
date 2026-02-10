@@ -11,20 +11,21 @@ struct FrameModeSelector: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: iconName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
 
-                Text("Scanning: \(selectedMode.rawValue)")
-                    .font(.system(size: 12, weight: .semibold))
+                Text(selectedMode.rawValue)
+                    .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.vertical, 10)
             .background(
                 Capsule()
                     .fill(Color.white.opacity(0.2))
             )
         }
-        .accessibilityLabel("Scanning mode: \(selectedMode.rawValue)")
+        .frame(minHeight: 44)
+        .accessibilityLabel("Frame mode: \(selectedMode.rawValue)")
         .accessibilityHint("Tap to change scanning mode")
     }
 

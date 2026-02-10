@@ -128,7 +128,7 @@ struct XimilarSlabResponse: Codable, Sendable {
                 cardName: ximilarCard.name ?? "Unknown",
                 setName: ximilarCard.setName ?? "Unknown",
                 cardNumber: ximilarCard.number ?? "???",
-                setCode: nil,  // Slab recognition doesn't provide set code
+                setCode: nil,
                 confidence: ximilarCard.prob ?? 0.0,
                 game: game,
                 rarity: ximilarCard.rarity,

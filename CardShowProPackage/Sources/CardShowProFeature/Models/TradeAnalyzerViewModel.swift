@@ -48,7 +48,7 @@ final class TradeAnalyzerViewModel {
         let card = TradeCard(
             name: manualCardName,
             setName: manualSetName.isEmpty ? nil : manualSetName,
-            marketValue: value,
+            estimatedValue: value,
             imageURL: nil,
             isFromInventory: isAddingToYourSide
         )

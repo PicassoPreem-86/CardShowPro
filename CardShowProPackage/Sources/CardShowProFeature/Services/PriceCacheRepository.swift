@@ -1,188 +1,105 @@
-import SwiftData
 import Foundation
-import OSLog
+import SwiftData
 
-/// Repository for managing cached pricing data in SwiftData
-/// Handles all CRUD operations for CachedPrice model
-@MainActor
-final class PriceCacheRepository {
-    private let modelContext: ModelContext
-    private let logger = Logger(subsystem: "com.cardshowpro.app", category: "PriceCache")
+/// Cached price data for a card (in-memory cache with TTL)
+final class CachedPrice: Sendable {
+    let cardID: String
+    let cardName: String
+    let setName: String
+    let setID: String
+    let cardNumber: String
+    let marketPrice: Double?
+    let lowPrice: Double?
+    let midPrice: Double?
+    let highPrice: Double?
+    let imageURLSmall: String?
+    let imageURLLarge: String?
+    let cachedAt: Date
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
-    }
+    // Mutable properties stored via nonisolated(unsafe) for Sendable
+    nonisolated(unsafe) var variantPricesJSON: Data?
+    nonisolated(unsafe) var conditionPrices: ConditionPrices?
+    nonisolated(unsafe) var priceChange7d: Double?
+    nonisolated(unsafe) var priceChange30d: Double?
+    nonisolated(unsafe) var priceHistory: [PricePoint]?
+    nonisolated(unsafe) var tcgplayerId: String?
+    nonisolated(unsafe) var justTCGLastUpdated: Date?
 
-    // MARK: - Create
-
-    /// Save new price to cache
-    func savePrice(_ cachedPrice: CachedPrice) throws {
-        modelContext.insert(cachedPrice)
-        try modelContext.save()
-        logger.info("Saved price for card: \(cachedPrice.cardID)")
-    }
-
-    // MARK: - Read
-
-    /// Fetch price by card ID
-    func getPrice(cardID: String) throws -> CachedPrice? {
-        let predicate = #Predicate<CachedPrice> { $0.cardID == cardID }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        return try modelContext.fetch(descriptor).first
-    }
-
-    /// Fetch all cached prices
-    func getAllPrices() throws -> [CachedPrice] {
-        let descriptor = FetchDescriptor<CachedPrice>(
-            sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
-        )
-        return try modelContext.fetch(descriptor)
-    }
-
-    /// Fetch stale prices (older than specified hours)
-    func getStalePrices(olderThanHours hours: Int = 24) throws -> [CachedPrice] {
-        let cutoffDate = Calendar.current.date(
-            byAdding: .hour,
-            value: -hours,
-            to: Date()
-        )!
-
-        let predicate = #Predicate<CachedPrice> { $0.lastUpdated < cutoffDate }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        return try modelContext.fetch(descriptor)
-    }
-
-    /// Search cached prices by card name
-    func searchPrices(query: String) throws -> [CachedPrice] {
-        let predicate = #Predicate<CachedPrice> {
-            $0.cardName.localizedStandardContains(query)
-        }
-        var descriptor = FetchDescriptor(predicate: predicate)
-        descriptor.fetchLimit = 50 // Limit results for performance
-        descriptor.sortBy = [SortDescriptor(\.cardName)]
-        return try modelContext.fetch(descriptor)
-    }
-
-    /// Get cache statistics
-    func getCacheStats() throws -> CacheStatistics {
-        let allPrices = try getAllPrices()
-        let stalePrices = try getStalePrices()
-
-        return CacheStatistics(
-            totalCards: allPrices.count,
-            staleCards: stalePrices.count,
-            freshCards: allPrices.count - stalePrices.count,
-            oldestPrice: allPrices.last?.lastUpdated,
-            newestPrice: allPrices.first?.lastUpdated,
-            totalSize: estimateCacheSize(allPrices)
-        )
-    }
-
-    // MARK: - Update
-
-    /// Update existing cached price
-    func updatePrice(_ cachedPrice: CachedPrice) throws {
-        cachedPrice.lastUpdated = Date()
-        try modelContext.save()
-        logger.info("Updated price for card: \(cachedPrice.cardID)")
-    }
-
-    /// Refresh price data (update timestamp and values)
-    func refreshPrice(
+    init(
         cardID: String,
-        newMarketPrice: Double?,
-        newLowPrice: Double?,
-        newMidPrice: Double?,
-        newHighPrice: Double?
-    ) throws {
-        guard let cachedPrice = try getPrice(cardID: cardID) else {
-            logger.warning("Attempted to refresh non-existent card: \(cardID)")
-            return
-        }
-
-        cachedPrice.marketPrice = newMarketPrice
-        cachedPrice.lowPrice = newLowPrice
-        cachedPrice.midPrice = newMidPrice
-        cachedPrice.highPrice = newHighPrice
-        cachedPrice.lastUpdated = Date()
-
-        try modelContext.save()
-        logger.info("Refreshed price for card: \(cardID)")
+        cardName: String,
+        setName: String,
+        setID: String,
+        cardNumber: String,
+        marketPrice: Double? = nil,
+        lowPrice: Double? = nil,
+        midPrice: Double? = nil,
+        highPrice: Double? = nil,
+        imageURLSmall: String? = nil,
+        imageURLLarge: String? = nil
+    ) {
+        self.cardID = cardID
+        self.cardName = cardName
+        self.setName = setName
+        self.setID = setID
+        self.cardNumber = cardNumber
+        self.marketPrice = marketPrice
+        self.lowPrice = lowPrice
+        self.midPrice = midPrice
+        self.highPrice = highPrice
+        self.imageURLSmall = imageURLSmall
+        self.imageURLLarge = imageURLLarge
+        self.cachedAt = Date()
     }
 
-    // MARK: - Delete
-
-    /// Delete single cached price
-    func deletePrice(cardID: String) throws {
-        guard let cachedPrice = try getPrice(cardID: cardID) else { return }
-        modelContext.delete(cachedPrice)
-        try modelContext.save()
-        logger.info("Deleted cached price for card: \(cardID)")
+    /// Age of cache entry in hours
+    var ageInHours: Double {
+        Date().timeIntervalSince(cachedAt) / 3600
     }
 
-    /// Clear all cached prices
-    func clearAll() throws {
-        let allPrices = try getAllPrices()
-        for price in allPrices {
-            modelContext.delete(price)
-        }
-        try modelContext.save()
-        logger.info("Cleared all cached prices (\(allPrices.count) cards)")
+    /// Whether cache is still fresh (< 24 hours)
+    var isFresh: Bool {
+        ageInHours < 24
     }
 
-    /// Delete stale prices only
-    func deleteStalePrices(olderThanDays days: Int = 30) throws {
-        let cutoffDate = Calendar.current.date(
-            byAdding: .day,
-            value: -days,
-            to: Date()
-        )!
-
-        let predicate = #Predicate<CachedPrice> { $0.lastUpdated < cutoffDate }
-        try modelContext.delete(model: CachedPrice.self, where: predicate)
-        try modelContext.save()
-        logger.info("Deleted cached prices older than \(days) days")
+    /// Whether cache entry is stale (> 24 hours)
+    var isStale: Bool {
+        !isFresh
     }
 
-    // MARK: - Helpers
+    /// Set condition prices from JustTCG data
+    func setConditionPrices(_ prices: ConditionPrices) {
+        self.conditionPrices = prices
+    }
 
-    /// Estimate total cache size in bytes (approximate)
-    private func estimateCacheSize(_ prices: [CachedPrice]) -> Int {
-        // Rough estimate: 500 bytes per card + variant data
-        return prices.count * 500 + prices.compactMap { $0.variantPricesJSON?.count }.reduce(0, +)
+    /// Set price history data
+    func setPriceHistory(_ history: [PricePoint]) {
+        self.priceHistory = history
     }
 }
 
-// MARK: - Cache Statistics
+/// Repository for caching card prices using in-memory storage
+@MainActor
+final class PriceCacheRepository {
+    private var cache: [String: CachedPrice] = [:]
+    private let modelContext: ModelContext?
 
-public struct CacheStatistics: Sendable {
-    public let totalCards: Int
-    public let staleCards: Int
-    public let freshCards: Int
-    public let oldestPrice: Date?
-    public let newestPrice: Date?
-    public let totalSize: Int
-
-    public var totalSizeMB: Double {
-        Double(totalSize) / 1_048_576 // Convert bytes to MB
+    init(modelContext: ModelContext? = nil) {
+        self.modelContext = modelContext
     }
 
-    public var stalePercentage: Double {
-        guard totalCards > 0 else { return 0 }
-        return Double(staleCards) / Double(totalCards) * 100
+    /// Get cached price for a card
+    func getPrice(cardID: String) throws -> CachedPrice? {
+        cache[cardID]
     }
 
-    public var freshPercentage: Double {
-        guard totalCards > 0 else { return 0 }
-        return Double(freshCards) / Double(totalCards) * 100
+    /// Save price to cache
+    func savePrice(_ price: CachedPrice) throws {
+        cache[price.cardID] = price
     }
 
-    public init(totalCards: Int, staleCards: Int, freshCards: Int, oldestPrice: Date?, newestPrice: Date?, totalSize: Int) {
-        self.totalCards = totalCards
-        self.staleCards = staleCards
-        self.freshCards = freshCards
-        self.oldestPrice = oldestPrice
-        self.newestPrice = newestPrice
-        self.totalSize = totalSize
+    /// Clear all cached prices
+    func clearAll() {
+        cache.removeAll()
     }
 }

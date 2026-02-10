@@ -8,6 +8,6 @@ struct CardShowProApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [InventoryCard.self, Contact.self, WantListItem.self, CachedPrice.self])
+        .modelContainer(for: [InventoryCard.self])
     }
 }

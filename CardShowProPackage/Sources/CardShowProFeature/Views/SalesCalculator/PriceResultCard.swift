@@ -258,7 +258,7 @@ private struct CopyToast: View {
         profitMarginPercent: 20.93
     )
 
-    return PriceResultCard(result: result, model: model)
+    PriceResultCard(result: result, model: model)
         .padding()
         .background(DesignSystem.Colors.backgroundPrimary)
 }
@@ -278,7 +278,7 @@ private struct CopyToast: View {
         profitMarginPercent: 28.07
     )
 
-    return PriceResultCard(result: result, model: model)
+    PriceResultCard(result: result, model: model)
         .padding()
         .background(DesignSystem.Colors.backgroundPrimary)
 }

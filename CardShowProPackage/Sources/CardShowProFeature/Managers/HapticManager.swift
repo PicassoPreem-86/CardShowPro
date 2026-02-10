@@ -1,8 +1,4 @@
-import SwiftUI
-
-#if canImport(UIKit)
 import UIKit
-#endif
 
 /// Centralized manager for all haptic feedback in the app
 ///
@@ -27,22 +23,21 @@ import UIKit
 /// // Prepare for upcoming haptic (optional, for best timing)
 /// HapticManager.shared.prepare()
 /// ```
-#if canImport(UIKit)
 @MainActor
 final class HapticManager {
     // MARK: - Singleton
     static let shared = HapticManager()
 
-    // MARK: - Generators (lazy to avoid blocking during initialization)
-    private lazy var selectionGenerator = UISelectionFeedbackGenerator()
-    private lazy var impactLightGenerator = UIImpactFeedbackGenerator(style: .light)
-    private lazy var impactMediumGenerator = UIImpactFeedbackGenerator(style: .medium)
-    private lazy var impactHeavyGenerator = UIImpactFeedbackGenerator(style: .heavy)
-    private lazy var notificationGenerator = UINotificationFeedbackGenerator()
+    // MARK: - Generators
+    private let selectionGenerator = UISelectionFeedbackGenerator()
+    private let impactLightGenerator = UIImpactFeedbackGenerator(style: .light)
+    private let impactMediumGenerator = UIImpactFeedbackGenerator(style: .medium)
+    private let impactHeavyGenerator = UIImpactFeedbackGenerator(style: .heavy)
+    private let notificationGenerator = UINotificationFeedbackGenerator()
 
     // MARK: - Initialization
     private init() {
-        // Generators are created lazily when first accessed to avoid blocking
+        // Generators are prepared lazily when needed
     }
 
     // MARK: - Selection Feedback
@@ -117,4 +112,3 @@ final class HapticManager {
         notificationGenerator.prepare()
     }
 }
-#endif

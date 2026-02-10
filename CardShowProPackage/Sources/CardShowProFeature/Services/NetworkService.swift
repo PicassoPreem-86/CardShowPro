@@ -47,6 +47,7 @@ enum NetworkError: LocalizedError {
 }
 
 /// Base network service for making HTTP requests
+@MainActor
 final class NetworkService: Sendable {
     static let shared = NetworkService()
 
@@ -56,8 +57,8 @@ final class NetworkService: Sendable {
 
     private init() {
         let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 10  // Reduced from 30s - fail faster for better UX
-        configuration.timeoutIntervalForResource = 30  // Reduced from 60s - overall timeout limit
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 60
         self.session = URLSession(configuration: configuration)
     }
 
@@ -206,12 +207,6 @@ final class NetworkService: Sendable {
                 do {
                     return try decoder.decode(T.self, from: data)
                 } catch {
-                    // Log raw response for debugging
-                    if let responseString = String(data: data, encoding: .utf8) {
-                        print("❌ DEBUG [Network]: Failed to decode response")
-                        print("❌ DEBUG [Network]: Raw response (first 1000 chars): \(String(responseString.prefix(1000)))")
-                    }
-                    print("❌ DEBUG [Network]: Decoding error: \(error)")
                     throw NetworkError.decodingError(error)
                 }
             } catch {

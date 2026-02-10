@@ -219,7 +219,7 @@ private struct FeePercentageIndicator: View {
         roiPercent: 38.33
     )
 
-    return CollapsibleFeeBreakdown(result: result)
+    CollapsibleFeeBreakdown(result: result)
         .padding()
         .background(DesignSystem.Colors.backgroundPrimary)
 }
@@ -257,7 +257,7 @@ private struct FeePercentageIndicator: View {
         roiPercent: 38.33
     )
 
-    return VStack {
+    VStack {
         CollapsibleFeeBreakdown(result: result)
     }
     .padding()

@@ -41,7 +41,7 @@ public final class ListingGeneratorState: Sendable {
 
     /// Estimated base price from selected card
     public var basePrice: Double {
-        selectedCard?.marketValue ?? 0.0
+        selectedCard?.estimatedValue ?? 0.0
     }
 
     /// Calculated price based on condition and strategy

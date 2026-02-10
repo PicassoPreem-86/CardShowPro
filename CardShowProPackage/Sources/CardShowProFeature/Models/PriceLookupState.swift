@@ -1,168 +1,105 @@
 import Foundation
 
-/// State model for the Card Price Lookup Tool
-/// This tool allows users to look up card prices WITHOUT adding to inventory
+/// State management for the Card Price Lookup view
 @MainActor
 @Observable
-final class PriceLookupState: Sendable {
-    // MARK: - Input Fields
-
-    /// Pokemon card name (required)
+final class PriceLookupState {
+    // Search input
     var cardName: String = ""
-
-    /// Card number in "25/102" or "25" format
     var cardNumber: String = ""
+    var parsedCardNumber: String? { cardNumber.isEmpty ? nil : cardNumber }
 
-    // MARK: - Pricing Data
+    // Condition selection
+    var selectedCondition: PriceCondition = .nearMint
 
-    /// Detailed TCGPlayer pricing with all variants
-    var tcgPlayerPrices: DetailedTCGPlayerPricing?
-
-    /// eBay last sold pricing (placeholder for Phase 2)
-    var ebayLastSold: EbayPricing?
-
-    // MARK: - UI State
-
-    /// Loading indicator
+    // Loading state
     var isLoading: Bool = false
-
-    /// Error message to display
     var errorMessage: String?
 
-    // MARK: - Card Search State
-
-    /// Currently selected card match
+    // Results
     var selectedMatch: CardMatch?
-
-    /// Available card matches from search
     var availableMatches: [CardMatch] = []
+    var tcgPlayerPrices: DetailedTCGPlayerPricing?
+    var tcgplayerId: String?
 
-    /// Recent search queries (limit to 10) - persisted to UserDefaults
-    var recentSearches: [RecentSearch] = []
+    // JustTCG condition pricing
+    var conditionPrices: ConditionPrices?
+    var priceChange7d: Double?
+    var priceChange30d: Double?
+    var priceHistory: [PricePoint]?
 
-    /// Autocomplete suggestions
-    var autocompleteSuggestions: [CardMatch] = []
-
-    /// Loading indicator for autocomplete
-    var isLoadingAutocomplete: Bool = false
-
-    // MARK: - Cache State
-
-    /// Whether the current result is from cache
+    // Cache state
     var isFromCache: Bool = false
+    var cacheAgeHours: Double?
 
-    /// Age of cached data in hours (if from cache)
-    var cacheAgeHours: Int?
+    // Autocomplete
+    var autocompleteSuggestions: [String] = []
+
+    // Recent searches
+    var recentSearches: [RecentSearch] = []
 
     // MARK: - Computed Properties
 
-    /// Cache age display string
+    /// Whether we have enough data to perform a lookup
+    var canLookupPrice: Bool {
+        !cardName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Whether JustTCG condition pricing is available
+    var hasJustTCGPricing: Bool {
+        conditionPrices != nil && !(conditionPrices?.availableConditions.isEmpty ?? true)
+    }
+
+    /// Current price based on selected condition
+    var currentConditionPrice: Double? {
+        conditionPrices?.price(for: selectedCondition) ?? tcgPlayerPrices?.bestAvailablePrice
+    }
+
+    /// Formatted cache age string
     var cacheAge: String {
         guard let hours = cacheAgeHours else { return "" }
         if hours < 1 {
-            return "Just updated"
-        } else if hours == 1 {
-            return "1 hour ago"
+            return "< 1h ago"
         } else if hours < 24 {
-            return "\(hours) hours ago"
+            return "\(Int(hours))h ago"
         } else {
-            let days = hours / 24
-            return days == 1 ? "1 day ago" : "\(days) days ago"
+            return "\(Int(hours / 24))d ago"
         }
-    }
-
-    /// Check if lookup button should be enabled
-    var canLookupPrice: Bool {
-        !cardName.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    /// Parse card number from "25/102" or "25" format for API query
-    var parsedCardNumber: String? {
-        let trimmed = cardNumber.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
-
-        // If format is "25/102", extract "25"
-        if let slashIndex = trimmed.firstIndex(of: "/") {
-            return String(trimmed[..<slashIndex]).trimmingCharacters(in: .whitespaces)
-        }
-
-        // Otherwise return as-is (e.g., "25")
-        return trimmed
-    }
-
-    // MARK: - Initialization
-
-    init() {
-        loadRecentSearches()
     }
 
     // MARK: - Methods
 
-    /// Reset all state
-    func reset() {
-        cardName = ""
-        cardNumber = ""
-        tcgPlayerPrices = nil
-        ebayLastSold = nil
-        isLoading = false
-        errorMessage = nil
-        selectedMatch = nil
-        availableMatches = []
-        isFromCache = false
-        cacheAgeHours = nil
-    }
-
-    /// Add to recent searches
-    func addToRecentSearches(_ query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
+    func addToRecentSearches(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-
-        // Remove if already exists (case-insensitive)
         recentSearches.removeAll { $0.cardName.lowercased() == trimmed.lowercased() }
-
-        // Add to front
-        let search = RecentSearch(cardName: trimmed, timestamp: Date())
-        recentSearches.insert(search, at: 0)
-
-        // Limit to 10
+        recentSearches.insert(RecentSearch(cardName: trimmed), at: 0)
         if recentSearches.count > 10 {
             recentSearches = Array(recentSearches.prefix(10))
         }
-
-        // Persist to UserDefaults
-        saveRecentSearches()
     }
 
-    /// Clear all recent searches
     func clearRecentSearches() {
         recentSearches.removeAll()
-        UserDefaults.standard.removeObject(forKey: "recentCardSearches")
     }
 
-    /// Save recent searches to UserDefaults
-    private func saveRecentSearches() {
-        if let encoded = try? JSONEncoder().encode(recentSearches) {
-            UserDefaults.standard.set(encoded, forKey: "recentCardSearches")
-        }
-    }
-
-    /// Load recent searches from UserDefaults
-    func loadRecentSearches() {
-        guard let data = UserDefaults.standard.data(forKey: "recentCardSearches"),
-              let decoded = try? JSONDecoder().decode([RecentSearch].self, from: data) else {
-            return
-        }
-        recentSearches = decoded
-    }
-
-    /// Clear error message
     func clearError() {
         errorMessage = nil
     }
 
-    /// Clear autocomplete suggestions
-    func clearAutocomplete() {
-        autocompleteSuggestions = []
-        isLoadingAutocomplete = false
+    /// Reset for a new lookup
+    func reset() {
+        selectedMatch = nil
+        availableMatches = []
+        tcgPlayerPrices = nil
+        tcgplayerId = nil
+        conditionPrices = nil
+        priceChange7d = nil
+        priceChange30d = nil
+        priceHistory = nil
+        isFromCache = false
+        cacheAgeHours = nil
+        errorMessage = nil
+        isLoading = false
     }
 }

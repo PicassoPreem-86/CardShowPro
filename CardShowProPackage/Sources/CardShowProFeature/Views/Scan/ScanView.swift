@@ -67,7 +67,6 @@ struct ScanView: View {
 
     // Search state
     @State private var searchText: String = ""
-    @State private var isSearching = false
 
     // Camera state
     @State private var selectedFrameMode: FrameMode = .raw
@@ -75,7 +74,6 @@ struct ScanView: View {
 
     // Processing state (seamless flow with specific progress feedback)
     @State private var scanProgress: ScanProgress = .idle
-    @State private var scanTask: Task<Void, Never>?
 
     // UI state - false = camera large (default), true = recent scans expanded
     @State private var isRecentScansExpanded = false
@@ -95,15 +93,10 @@ struct ScanView: View {
     @State private var errorMessage: String?
     @State private var showError = false
 
-    // NEW: Ambiguity handling state (for scan results)
+    // NEW: Ambiguity handling state
     @State private var ambiguousMatches: [LocalCardMatch] = []
     @State private var suggestedSets: [String] = []
     @State private var showAmbiguitySheet = false
-
-    // Search results state (for manual search)
-    @State private var searchResults: [LocalCardMatch] = []
-    @State private var lastSearchQuery: String = ""
-    @State private var showSearchResults = false
 
     init(showBackButton: Bool = false) {
         self.showBackButton = showBackButton
@@ -127,7 +120,8 @@ struct ScanView: View {
                     showBackButton: showBackButton,
                     onBack: { dismiss() },
                     onSubmit: {
-                        performSearch()
+                        // Pre-fill search and open manual entry
+                        showManualEntry = true
                     }
                 )
                 .padding(.top, 8)
@@ -162,25 +156,11 @@ struct ScanView: View {
                 candidates: ambiguousMatches,
                 suggestedSets: suggestedSets,
                 onSelect: { selectedCard in
-                    // User selected a card from the ambiguity sheet (scan disambiguation)
+                    // User selected a card from the ambiguity sheet
                     let cardMatch = selectedCard.toCardMatch()
                     scannedCardsManager.addCard(from: cardMatch)
                     HapticManager.shared.success()
                     scanProgress = .idle
-                    showAmbiguitySheet = false
-                }
-            )
-        }
-        .sheet(isPresented: $showSearchResults) {
-            SearchResultsSheet(
-                searchQuery: lastSearchQuery,
-                results: searchResults,
-                onSelect: { selectedCard in
-                    // User selected a card from search results
-                    let cardMatch = selectedCard.toCardMatch()
-                    scannedCardsManager.addCard(from: cardMatch)
-                    HapticManager.shared.success()
-                    showSearchResults = false
                 }
             )
         }
@@ -512,24 +492,6 @@ struct ScanView: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
-
-            // Cancel button
-            Button {
-                cancelScan()
-            } label: {
-                Text("Cancel")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(Color.white.opacity(0.15))
-                    )
-            }
-            .frame(minWidth: 44, minHeight: 44)
-            .accessibilityLabel("Cancel scan")
-            .accessibilityHint("Stops the current scan operation")
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
@@ -596,61 +558,6 @@ struct ScanView: View {
         cameraManager.stopSession()
     }
 
-    // MARK: - Search Flow
-
-    private func performSearch() {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return }
-
-        let searchQuery = query  // Capture for closure
-        isSearching = true
-        HapticManager.shared.light()
-
-        Task {
-            do {
-                // Ensure database is initialized
-                if await !localDB.isReady {
-                    try await localDB.initialize()
-                }
-
-                // Search local database for all matches
-                let matches = try await localDB.search(
-                    name: searchQuery,
-                    number: nil,
-                    limit: 200  // Show up to 200 cards
-                )
-
-                await MainActor.run {
-                    isSearching = false
-
-                    if matches.isEmpty {
-                        // No matches found - show error toast
-                        Task {
-                            await showErrorToast("No cards found for '\(searchQuery)'")
-                        }
-                    } else if matches.count == 1 {
-                        // Single match - add directly to scanned cards
-                        let cardMatch = matches[0].toCardMatch()
-                        scannedCardsManager.addCard(from: cardMatch)
-                        HapticManager.shared.success()
-                        searchText = ""  // Clear search after successful match
-                    } else {
-                        // Multiple matches - show search results sheet
-                        self.searchResults = matches
-                        self.lastSearchQuery = searchQuery  // Save query for sheet title
-                        self.showSearchResults = true
-                        searchText = ""  // Clear search when showing sheet
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isSearching = false
-                }
-                await showErrorToast("Search failed: \(error.localizedDescription)")
-            }
-        }
-    }
-
     // MARK: - Seamless Capture Flow (OCR → Local DB Primary, Remote API Fallback)
     // FAST: OCR (~200ms) → Local SQLite FTS5 (<50ms) = sub-500ms total
     // Remote API only used when local database has no matches
@@ -662,11 +569,10 @@ struct ScanView: View {
         scanProgress = .capturing
         HapticManager.shared.medium()
 
-        scanTask = Task {
+        Task {
             do {
                 // 1. Capture photo
                 let originalImage = try await cameraManager.capturePhoto()
-                try Task.checkCancellation()
                 var image = originalImage
 
                 // 1b. OPTIONAL: Rectify image for better OCR accuracy
@@ -684,7 +590,6 @@ struct ScanView: View {
                 await MainActor.run { scanProgress = .recognizingCard }
 
                 var ocrResult = try await ocrService.recognizeText(from: image)
-                try Task.checkCancellation()
 
                 // 2b. FALLBACK: If rectified image failed to find card name, retry with original
                 // This helps with CJK cards where rectification downscaling loses detail
@@ -725,7 +630,6 @@ struct ScanView: View {
                 // 3. CARD RESOLUTION using CardResolver (handles exact lookup, FTS, and ambiguity)
                 await MainActor.run { scanProgress = .searchingDatabase }
 
-                try Task.checkCancellation()
                 var matches: [CardMatch] = []
                 let shouldUseLocal = await featureFlags.shouldUseLocalSearch
                 let dbReady = await localDB.isReady
@@ -775,12 +679,10 @@ struct ScanView: View {
 
                 // 4. REMOTE API FALLBACK (only if local search found nothing and we have a valid name)
                 if matches.isEmpty && cardName != nil && !cardName!.isEmpty {
-                    try Task.checkCancellation()
                     print("🌐 Local DB empty, falling back to remote API...")
 
                     // Use fuzzy search since OCR can have slight errors
                     matches = try await pokemonService.searchCardFuzzy(name: cardName!, number: cardNumber)
-                    try Task.checkCancellation()
 
                     // Try exact search as backup if fuzzy returns nothing
                     if matches.isEmpty {
@@ -802,11 +704,6 @@ struct ScanView: View {
                     scanProgress = .idle
                 }
 
-            } catch is CancellationError {
-                // User cancelled - just reset to idle, no error
-                await MainActor.run {
-                    scanProgress = .idle
-                }
             } catch {
                 await MainActor.run {
                     scanProgress = .idle
@@ -815,13 +712,6 @@ struct ScanView: View {
                 HapticManager.shared.error()
             }
         }
-    }
-
-    private func cancelScan() {
-        scanTask?.cancel()
-        scanTask = nil
-        scanProgress = .idle
-        HapticManager.shared.light()
     }
 
     @MainActor

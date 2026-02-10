@@ -9,10 +9,13 @@ struct CardPriceLookupView: View {
     @State private var showMatchSelection = false
     @State private var showCopySuccess = false
     @State private var showInventoryEntry = false
+    @State private var showPriceHistory = false
     @State private var autocompleteTask: Task<Void, Never>?
     @State private var dismissToastTask: Task<Void, Never>?
     @FocusState private var focusedField: Field?
     private let pokemonService = PokemonTCGService.shared
+    private let justTCGService = JustTCGService.shared
+    private let localDatabase = LocalCardDatabase.shared
 
     // Cache integration
     @Environment(\.modelContext) private var modelContext
@@ -122,6 +125,17 @@ struct CardPriceLookupView: View {
                             state: scanState
                         )
                     }
+                }
+            }
+            .sheet(isPresented: $showPriceHistory) {
+                if let match = lookupState.selectedMatch {
+                    PriceHistorySheet(
+                        priceHistory: lookupState.priceHistory ?? [],
+                        cardName: match.cardName,
+                        currentPrice: lookupState.currentConditionPrice,
+                        priceChange7d: lookupState.priceChange7d,
+                        priceChange30d: lookupState.priceChange30d
+                    )
                 }
             }
             .onDisappear {
@@ -311,10 +325,15 @@ struct CardPriceLookupView: View {
                 cardDetailsSection(selectedMatch)
             }
 
-            // TCGPlayer Section
+            // JustTCG Condition Pricing (if available)
+            if lookupState.hasJustTCGPricing {
+                conditionPricingSection
+            }
+
+            // TCGPlayer Section (variant pricing)
             if let tcgPrices = lookupState.tcgPlayerPrices, tcgPrices.hasAnyPricing {
                 tcgPlayerPricingSection(tcgPrices)
-            } else {
+            } else if !lookupState.hasJustTCGPricing {
                 noPricingAvailableSection
             }
 
@@ -463,6 +482,49 @@ struct CardPriceLookupView: View {
         }
         .padding(DesignSystem.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
+    }
+
+    // MARK: - JustTCG Condition Pricing Section
+
+    private var conditionPricingSection: some View {
+        VStack(spacing: DesignSystem.Spacing.md) {
+            // Header with JustTCG label
+            HStack {
+                Image(systemName: "tag.fill")
+                    .font(DesignSystem.Typography.heading3)
+                    .foregroundStyle(DesignSystem.Colors.cyan)
+
+                Text("Condition Pricing")
+                    .font(DesignSystem.Typography.heading3)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+
+                Spacer()
+
+                // JustTCG badge
+                Text("JustTCG")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.cyan)
+                    .padding(.horizontal, DesignSystem.Spacing.xs)
+                    .padding(.vertical, 2)
+                    .background(DesignSystem.Colors.cyan.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm))
+            }
+
+            // Condition Price Selector
+            ConditionPriceSelector(
+                selectedCondition: Binding(
+                    get: { lookupState.selectedCondition },
+                    set: { lookupState.selectedCondition = $0 }
+                ),
+                conditionPrices: lookupState.conditionPrices,
+                priceChange7d: lookupState.priceChange7d,
+                onPriceHistoryTap: lookupState.priceHistory != nil ? {
+                    showPriceHistory = true
+                } : nil
+            )
+        }
+        .padding(DesignSystem.Spacing.md)
         .cardStyle()
     }
 
@@ -777,7 +839,7 @@ struct CardPriceLookupView: View {
             let cacheKey = generateCacheKey(lookupState.cardName, lookupState.parsedCardNumber)
 
             do {
-                // CACHE FIRST: Check cache before API
+                // CACHE FIRST: Check cache before any search
                 if let cachedPrice = try? priceCache.getPrice(cardID: cacheKey) {
                     // Check if fresh (< 24 hours)
                     if !cachedPrice.isStale {
@@ -791,13 +853,25 @@ struct CardPriceLookupView: View {
                     }
                 }
 
-                print("❌ CACHE MISS: \(cacheKey) - Fetching from API...")
+                print("❌ CACHE MISS: \(cacheKey) - Searching local database...")
 
-                // CACHE MISS OR STALE: Fetch from API
-                let matches = try await pokemonService.searchCard(
+                // LOCAL DATABASE SEARCH FIRST (fast <50ms)
+                // Ensure database is initialized
+                if await !localDatabase.isReady {
+                    try await localDatabase.initialize()
+                }
+
+                let localSearchStart = CFAbsoluteTimeGetCurrent()
+                let localMatches = try await localDatabase.search(
                     name: lookupState.cardName,
-                    number: lookupState.parsedCardNumber
+                    number: lookupState.parsedCardNumber,
+                    limit: 50
                 )
+                let localSearchTime = (CFAbsoluteTimeGetCurrent() - localSearchStart) * 1000
+                print("🗄️ LOCAL DB: Found \(localMatches.count) matches in \(String(format: "%.1f", localSearchTime))ms")
+
+                // Convert LocalCardMatch to CardMatch for UI
+                let matches = localMatches.map { $0.toCardMatch() }
 
                 guard !matches.isEmpty else {
                     lookupState.errorMessage = "No cards found matching '\(lookupState.cardName)'"
@@ -813,37 +887,51 @@ struct CardPriceLookupView: View {
                     return
                 }
 
-                // Single match - fetch pricing directly
+                // Single match - fetch pricing from API
                 let match = matches[0]
                 lookupState.selectedMatch = match
 
-                let detailedPricing = try await pokemonService.getDetailedPricing(cardID: match.id)
+                let (detailedPricing, tcgplayerId) = try await pokemonService.getDetailedPricing(cardID: match.id)
                 lookupState.tcgPlayerPrices = detailedPricing
+                lookupState.tcgplayerId = tcgplayerId
 
                 // SAVE TO CACHE
                 savePriceToCache(match: match, pricing: detailedPricing)
 
                 let duration = Date().timeIntervalSince(startTime)
-                print("⏱️ API LOOKUP: \(cacheKey) took \(String(format: "%.2f", duration))s")
+                print("⏱️ TOTAL LOOKUP: \(cacheKey) took \(String(format: "%.2f", duration))s (local: \(String(format: "%.0f", localSearchTime))ms)")
 
                 lookupState.addToRecentSearches(lookupState.cardName)
                 lookupState.isLoading = false
 
+                // Attempt to fetch JustTCG pricing in background
+                if let fetchedTcgplayerId = tcgplayerId {
+                    print("🔗 Found TCGPlayer ID: \(fetchedTcgplayerId) - fetching JustTCG pricing")
+                    Task {
+                        await fetchJustTCGPricing(tcgplayerId: fetchedTcgplayerId, cardID: match.id)
+                    }
+                } else {
+                    print("⚠️ No TCGPlayer ID available - JustTCG pricing unavailable")
+                }
+
             } catch {
                 let duration = Date().timeIntervalSince(startTime)
-                print("❌ LOOKUP FAILED: \(cacheKey) after \(String(format: "%.2f", duration))s")
+                print("❌ LOOKUP FAILED: \(cacheKey) after \(String(format: "%.2f", duration))s - \(error)")
 
-                // Improved error messages for common network failures
+                // Improved error messages for common failures
                 let errorMessage: String
 
-                if let urlError = error as? URLError {
+                if error is DatabaseError {
+                    // All database errors get a generic message
+                    errorMessage = "Card database error. Please try again or reinstall the app."
+                } else if let urlError = error as? URLError {
                     switch urlError.code {
                     case .notConnectedToInternet:
                         errorMessage = "No internet connection. Please check your WiFi or cellular data."
                     case .timedOut:
                         errorMessage = "Request timed out. The server took too long to respond. Please try again."
                     case .cannotFindHost, .cannotConnectToHost:
-                        errorMessage = "Cannot reach PokemonTCG.io servers. Please try again later."
+                        errorMessage = "Cannot reach pricing servers. Please try again later."
                     case .networkConnectionLost:
                         errorMessage = "Network connection lost. Please check your connection and try again."
                     default:
@@ -883,8 +971,9 @@ struct CardPriceLookupView: View {
 
             // CACHE MISS OR STALE: Fetch from API
             do {
-                let detailedPricing = try await pokemonService.getDetailedPricing(cardID: match.id)
+                let (detailedPricing, tcgplayerId) = try await pokemonService.getDetailedPricing(cardID: match.id)
                 lookupState.tcgPlayerPrices = detailedPricing
+                lookupState.tcgplayerId = tcgplayerId
 
                 // SAVE TO CACHE
                 savePriceToCache(match: match, pricing: detailedPricing)
@@ -894,6 +983,16 @@ struct CardPriceLookupView: View {
 
                 lookupState.addToRecentSearches(lookupState.cardName)
                 lookupState.isLoading = false
+
+                // Attempt to fetch JustTCG pricing in background
+                if let fetchedTcgplayerId = tcgplayerId {
+                    print("🔗 Found TCGPlayer ID: \(fetchedTcgplayerId) - fetching JustTCG pricing")
+                    Task {
+                        await fetchJustTCGPricing(tcgplayerId: fetchedTcgplayerId, cardID: match.id)
+                    }
+                } else {
+                    print("⚠️ No TCGPlayer ID available - JustTCG pricing unavailable")
+                }
             } catch {
                 let duration = Date().timeIntervalSince(startTime)
                 print("❌ LOOKUP FAILED (selectMatch): \(match.id) after \(String(format: "%.2f", duration))s")
@@ -952,6 +1051,53 @@ struct CardPriceLookupView: View {
         }
     }
 
+    // MARK: - JustTCG Integration
+
+    /// Fetch JustTCG condition pricing for the current card
+    private func fetchJustTCGPricing(tcgplayerId: String, cardID: String) async {
+        guard justTCGService.isConfigured else {
+            print("⚠️ JustTCG API not configured - skipping condition pricing")
+            return
+        }
+
+        do {
+            print("🔍 Fetching JustTCG pricing for TCGPlayer ID: \(tcgplayerId)")
+            let justTCGCard = try await justTCGService.getCardPricing(
+                tcgplayerId: tcgplayerId,
+                includePriceHistory: true
+            )
+
+            // Update lookup state with JustTCG data
+            // Use bestAvailableConditionPrices() to handle both Normal and Foil cards
+            let conditionPrices = ConditionPrices(from: justTCGCard.bestAvailableConditionPrices())
+            lookupState.conditionPrices = conditionPrices
+            print("📊 JustTCG available printings: \(justTCGCard.availablePrintings), primary: \(justTCGCard.primaryPrinting)")
+            lookupState.priceChange7d = justTCGCard.priceChange7d
+            lookupState.priceChange30d = justTCGCard.priceChange30d
+            lookupState.priceHistory = justTCGCard.nearMintPriceHistory
+            lookupState.tcgplayerId = tcgplayerId
+
+            print("✅ JustTCG pricing loaded: \(conditionPrices.availableConditions.count) conditions")
+
+            // Update cache with JustTCG data
+            if var cachedPrice = try? priceCache.getPrice(cardID: cardID) {
+                cachedPrice.setConditionPrices(conditionPrices)
+                cachedPrice.priceChange7d = justTCGCard.priceChange7d
+                cachedPrice.priceChange30d = justTCGCard.priceChange30d
+                cachedPrice.tcgplayerId = tcgplayerId
+                cachedPrice.justTCGLastUpdated = Date()
+                if let history = justTCGCard.nearMintPriceHistory {
+                    cachedPrice.setPriceHistory(history)
+                }
+                try? priceCache.savePrice(cachedPrice)
+                print("💾 JustTCG data cached for: \(cardID)")
+            }
+        } catch {
+            print("⚠️ JustTCG fetch failed: \(error.localizedDescription)")
+            // Non-critical - we still have TCGPlayer pricing
+        }
+    }
+
     // MARK: - Cache Helper Methods
 
     /// Generate cache key from card name and number
@@ -984,8 +1130,18 @@ struct CardPriceLookupView: View {
             unlimited: nil
         )
 
-        // If we have basic pricing, create a "Normal" variant
-        if cachedPrice.marketPrice != nil || cachedPrice.lowPrice != nil {
+        // Try to load full variant pricing from JSON first
+        if let variantData = cachedPrice.variantPricesJSON,
+           let variantPricing = try? JSONDecoder().decode(VariantPricing.self, from: variantData) {
+            pricing = DetailedTCGPlayerPricing(
+                normal: variantPricing.normal.map { DetailedTCGPlayerPricing.PriceBreakdown(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+                holofoil: variantPricing.holofoil.map { DetailedTCGPlayerPricing.PriceBreakdown(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+                reverseHolofoil: variantPricing.reverseHolofoil.map { DetailedTCGPlayerPricing.PriceBreakdown(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+                firstEdition: variantPricing.firstEdition.map { DetailedTCGPlayerPricing.PriceBreakdown(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+                unlimited: variantPricing.unlimited.map { DetailedTCGPlayerPricing.PriceBreakdown(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) }
+            )
+        } else if cachedPrice.marketPrice != nil || cachedPrice.lowPrice != nil {
+            // Fallback: If we have basic pricing but no variant JSON, create a "Normal" variant
             pricing = DetailedTCGPlayerPricing(
                 normal: DetailedTCGPlayerPricing.PriceBreakdown(
                     low: cachedPrice.lowPrice,
@@ -1004,12 +1160,20 @@ struct CardPriceLookupView: View {
         lookupState.isFromCache = true
         lookupState.cacheAgeHours = cachedPrice.ageInHours
         lookupState.addToRecentSearches(cachedPrice.cardName)
+
+        // Load JustTCG condition pricing from cache
+        lookupState.conditionPrices = cachedPrice.conditionPrices
+        lookupState.priceChange7d = cachedPrice.priceChange7d
+        lookupState.priceChange30d = cachedPrice.priceChange30d
+        lookupState.priceHistory = cachedPrice.priceHistory
+        lookupState.tcgplayerId = cachedPrice.tcgplayerId
     }
 
     /// Save price to cache after API fetch
     private func savePriceToCache(match: CardMatch, pricing: DetailedTCGPlayerPricing) {
-        // Extract normal variant pricing for basic cache fields
-        let normalVariant = pricing.normal
+        // Extract BEST AVAILABLE variant pricing (not just normal)
+        // Priority: normal > holofoil > reverseHolofoil > firstEdition > unlimited
+        let bestVariant = pricing.normal ?? pricing.holofoil ?? pricing.reverseHolofoil ?? pricing.firstEdition ?? pricing.unlimited
 
         let cachedPrice = CachedPrice(
             cardID: match.id,
@@ -1017,17 +1181,27 @@ struct CardPriceLookupView: View {
             setName: match.setName,
             setID: match.setID,
             cardNumber: match.cardNumber,
-            marketPrice: normalVariant?.market,
-            lowPrice: normalVariant?.low,
-            midPrice: normalVariant?.mid,
-            highPrice: normalVariant?.high,
+            marketPrice: bestVariant?.market,
+            lowPrice: bestVariant?.low,
+            midPrice: bestVariant?.mid,
+            highPrice: bestVariant?.high,
             imageURLSmall: match.imageURL?.absoluteString,
             imageURLLarge: match.imageURL?.absoluteString
         )
 
+        // Store full variant pricing as JSON for complete reconstruction
+        let variantPricing = VariantPricing(
+            normal: pricing.normal.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+            holofoil: pricing.holofoil.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+            reverseHolofoil: pricing.reverseHolofoil.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+            firstEdition: pricing.firstEdition.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) },
+            unlimited: pricing.unlimited.map { VariantPrice(low: $0.low, mid: $0.mid, high: $0.high, market: $0.market) }
+        )
+        cachedPrice.variantPricesJSON = try? JSONEncoder().encode(variantPricing)
+
         do {
             try priceCache.savePrice(cachedPrice)
-            print("💾 CACHED: \(match.id)")
+            print("💾 CACHED: \(match.id) (variants: \(pricing.availableVariants.map { $0.name }.joined(separator: ", ")))")
         } catch {
             print("⚠️ Failed to cache price: \(error)")
         }

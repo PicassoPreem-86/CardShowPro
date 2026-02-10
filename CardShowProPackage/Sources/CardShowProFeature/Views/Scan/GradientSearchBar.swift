@@ -50,7 +50,7 @@ struct GradientSearchBar: View {
                     .submitLabel(.search)
                     .onSubmit(onSubmit)
 
-                // Clear button when text exists OR dismiss when focused
+                // Clear button when text exists
                 if !text.isEmpty {
                     Button {
                         text = ""
@@ -62,18 +62,6 @@ struct GradientSearchBar: View {
                     }
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel("Clear search")
-                } else if isFocused {
-                    // Dismiss keyboard button when focused but no text
-                    Button {
-                        isFocused = false
-                        HapticManager.shared.light()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.gray.opacity(0.8))
-                    }
-                    .frame(minWidth: 44, minHeight: 44)
-                    .accessibilityLabel("Dismiss keyboard")
                 }
             }
             .padding(.horizontal, 14)
@@ -93,11 +81,8 @@ struct GradientSearchBar: View {
                         lineWidth: 2
                     )
             )
-            .fixedSize(horizontal: false, vertical: true) // Prevent vertical size changes
-            .animation(nil, value: isFocused) // Prevent default focus animation
         }
         .padding(.horizontal, 16)
-        .animation(nil, value: isFocused) // Prevent animation on the entire HStack
     }
 }
 

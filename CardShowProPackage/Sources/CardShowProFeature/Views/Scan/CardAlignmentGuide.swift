@@ -1,5 +1,14 @@
 import SwiftUI
 
+/// Detection state for live card scanning
+enum CardDetectionState: Equatable {
+    case searching
+    case detected(confidence: Double)
+    case stabilizing(progress: Double)
+    case locked
+    case cooldown
+}
+
 /// Frame mode for different card types
 enum FrameMode: String, CaseIterable {
     case raw = "Raw"
@@ -31,26 +40,55 @@ enum FrameMode: String, CaseIterable {
 /// Visual guide overlay for camera view showing where to position the card
 /// - Raw/Graded modes: Frosted overlay outside frame + green corner brackets
 /// - Bulk mode: Full camera, no overlay, no brackets
+///
+/// In live scan mode, brackets change color based on detection state:
+/// - Gray: Searching for card
+/// - Yellow: Card detected, stabilizing
+/// - Green: Card locked, ready for capture
 struct CardAlignmentGuide: View {
     let frameMode: FrameMode
     let isCapturing: Bool
+    let detectionState: CardDetectionState
 
-
-    // Bright green color for corner brackets (#7FFF00 / lime green)
-    private let bracketColor = Color(red: 0.5, green: 1.0, blue: 0.0)
+    // Colors for detection states
+    private let searchingColor = Color.gray.opacity(0.7)
+    private let detectedColor = Color.yellow
+    private let stabilizingColor = Color.orange
+    private let lockedColor = Color(red: 0.5, green: 1.0, blue: 0.0)  // Bright green
+    private let capturingColor = Color.white
 
     // Frosted overlay opacity
     private let frostedOpacity: Double = 0.6
 
-    init(frameMode: FrameMode = .raw, isCapturing: Bool = false) {
+    init(frameMode: FrameMode = .raw, isCapturing: Bool = false, detectionState: CardDetectionState = .searching) {
         self.frameMode = frameMode
         self.isCapturing = isCapturing
+        self.detectionState = detectionState
     }
 
-    // Legacy initializer for compatibility
+    // Legacy initializer for compatibility (manual mode - always shows green)
     init(isCardDetected: Bool = false, isCapturing: Bool = false) {
         self.frameMode = .raw
         self.isCapturing = isCapturing
+        self.detectionState = .searching  // In manual mode, we don't track detection
+    }
+
+    /// Color based on current detection state
+    private var bracketColor: Color {
+        if isCapturing { return capturingColor }
+
+        switch detectionState {
+        case .searching:
+            return lockedColor  // Default green for manual mode
+        case .detected:
+            return detectedColor
+        case .stabilizing:
+            return stabilizingColor
+        case .locked:
+            return lockedColor
+        case .cooldown:
+            return capturingColor
+        }
     }
 
     var body: some View {
@@ -233,4 +271,25 @@ private struct CornerBracket: View {
         Color.gray.opacity(0.3).ignoresSafeArea()
         CardAlignmentGuide(frameMode: .raw, isCapturing: true)
     }
+}
+
+#Preview("Detection States") {
+    VStack(spacing: 20) {
+        Text("Searching").foregroundStyle(.white)
+        CardAlignmentGuide(frameMode: .raw, isCapturing: false, detectionState: .searching)
+            .frame(height: 150)
+
+        Text("Detected").foregroundStyle(.white)
+        CardAlignmentGuide(frameMode: .raw, isCapturing: false, detectionState: .detected(confidence: 0.85))
+            .frame(height: 150)
+
+        Text("Stabilizing").foregroundStyle(.white)
+        CardAlignmentGuide(frameMode: .raw, isCapturing: false, detectionState: .stabilizing(progress: 0.6))
+            .frame(height: 150)
+
+        Text("Locked").foregroundStyle(.white)
+        CardAlignmentGuide(frameMode: .raw, isCapturing: false, detectionState: .locked)
+            .frame(height: 150)
+    }
+    .background(Color.black)
 }

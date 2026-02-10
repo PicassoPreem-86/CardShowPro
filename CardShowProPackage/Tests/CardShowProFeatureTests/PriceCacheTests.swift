@@ -1,27 +1,18 @@
 import Testing
 import Foundation
-import SwiftData
 @testable import CardShowProFeature
 
 @Suite("Price Cache Tests")
 @MainActor
 struct PriceCacheTests {
-    let container: ModelContainer
-    let context: ModelContext
     let repository: PriceCacheRepository
 
     init() {
-        // Create in-memory container for testing
-        let schema = Schema([CachedPrice.self])
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        container = try! ModelContainer(for: schema, configurations: [configuration])
-        context = ModelContext(container)
-        repository = PriceCacheRepository(modelContext: context)
+        repository = PriceCacheRepository()
     }
 
     @Test("Create and fetch cached price")
     func createAndFetch() async throws {
-        // Create test price
         let price = CachedPrice(
             cardID: "base1-4",
             cardName: "Charizard",
@@ -33,7 +24,6 @@ struct PriceCacheTests {
 
         try repository.savePrice(price)
 
-        // Fetch it back
         let fetched = try repository.getPrice(cardID: "base1-4")
 
         #expect(fetched != nil)
@@ -41,9 +31,8 @@ struct PriceCacheTests {
         #expect(fetched?.marketPrice == 500.00)
     }
 
-    @Test("Freshness levels calculated correctly")
-    func freshnessLevels() async throws {
-        // Create fresh price (<1 hour)
+    @Test("Freshness calculated correctly for new entry")
+    func freshnessForNewEntry() async throws {
         let freshPrice = CachedPrice(
             cardID: "test-1",
             cardName: "Test Card",
@@ -51,26 +40,14 @@ struct PriceCacheTests {
             setID: "test",
             cardNumber: "1"
         )
-        #expect(freshPrice.freshnessLevel == .fresh)
+
+        #expect(freshPrice.isFresh == true)
         #expect(freshPrice.isStale == false)
-
-        // Create stale price (25 hours old)
-        let stalePrice = CachedPrice(
-            cardID: "test-2",
-            cardName: "Old Card",
-            setName: "Test Set",
-            setID: "test",
-            cardNumber: "2"
-        )
-        stalePrice.lastUpdated = Calendar.current.date(byAdding: .hour, value: -25, to: Date())!
-
-        #expect(stalePrice.isStale == true)
-        #expect(stalePrice.freshnessLevel == .stale)
+        #expect(freshPrice.ageInHours < 1)
     }
 
-    @Test("Search cached prices by name")
-    func searchByName() async throws {
-        // Add multiple cards
+    @Test("Save and retrieve multiple prices")
+    func saveAndRetrieveMultiple() async throws {
         let cards = [
             CachedPrice(cardID: "xy1-1", cardName: "Charizard", setName: "XY", setID: "xy1", cardNumber: "1"),
             CachedPrice(cardID: "xy1-2", cardName: "Pikachu", setName: "XY", setID: "xy1", cardNumber: "2"),
@@ -81,18 +58,18 @@ struct PriceCacheTests {
             try repository.savePrice(card)
         }
 
-        // Search for "Char"
-        let results = try repository.searchPrices(query: "Char")
+        let char = try repository.getPrice(cardID: "xy1-1")
+        let pika = try repository.getPrice(cardID: "xy1-2")
+        let charm = try repository.getPrice(cardID: "xy1-3")
 
-        #expect(results.count == 2) // Charizard and Charmander
-        #expect(results.contains { $0.cardName == "Charizard" })
-        #expect(results.contains { $0.cardName == "Charmander" })
+        #expect(char?.cardName == "Charizard")
+        #expect(pika?.cardName == "Pikachu")
+        #expect(charm?.cardName == "Charmander")
     }
 
-    @Test("Update price refreshes timestamp")
-    func updatePrice() async throws {
-        // Create initial price
-        let price = CachedPrice(
+    @Test("Overwrite existing price")
+    func overwritePrice() async throws {
+        let original = CachedPrice(
             cardID: "test-update",
             cardName: "Test Card",
             setName: "Test",
@@ -100,86 +77,32 @@ struct PriceCacheTests {
             cardNumber: "1",
             marketPrice: 50.00
         )
-        try repository.savePrice(price)
+        try repository.savePrice(original)
 
-        let originalTimestamp = price.lastUpdated
-
-        // Wait a moment
-        try await Task.sleep(for: .milliseconds(100))
-
-        // Update price
-        try repository.refreshPrice(
+        let updated = CachedPrice(
             cardID: "test-update",
-            newMarketPrice: 75.00,
-            newLowPrice: 70.00,
-            newMidPrice: 72.50,
-            newHighPrice: 80.00
-        )
-
-        // Fetch updated price
-        let updated = try repository.getPrice(cardID: "test-update")
-
-        #expect(updated?.marketPrice == 75.00)
-        #expect(updated!.lastUpdated > originalTimestamp)
-    }
-
-    @Test("Delete cached price")
-    func deletePrice() async throws {
-        // Create and save price
-        let price = CachedPrice(
-            cardID: "delete-test",
-            cardName: "Delete Me",
+            cardName: "Test Card",
             setName: "Test",
             setID: "test",
-            cardNumber: "1"
+            cardNumber: "1",
+            marketPrice: 75.00
         )
-        try repository.savePrice(price)
+        try repository.savePrice(updated)
 
-        // Verify it exists
-        let exists = try repository.getPrice(cardID: "delete-test")
-        #expect(exists != nil)
+        let fetched = try repository.getPrice(cardID: "test-update")
 
-        // Delete it
-        try repository.deletePrice(cardID: "delete-test")
-
-        // Verify it's gone
-        let deleted = try repository.getPrice(cardID: "delete-test")
-        #expect(deleted == nil)
+        #expect(fetched?.marketPrice == 75.00)
     }
 
-    @Test("Cache statistics calculation")
-    func cacheStats() async throws {
-        // Add 10 cards (5 fresh, 5 stale)
-        for i in 1...10 {
-            let card = CachedPrice(
-                cardID: "stats-\(i)",
-                cardName: "Card \(i)",
-                setName: "Test",
-                setID: "test",
-                cardNumber: "\(i)"
-            )
+    @Test("Missing price returns nil")
+    func missingPriceReturnsNil() async throws {
+        let result = try repository.getPrice(cardID: "nonexistent")
 
-            // Make half of them stale (>24 hours)
-            if i > 5 {
-                card.lastUpdated = Calendar.current.date(byAdding: .hour, value: -30, to: Date())!
-            }
-
-            try repository.savePrice(card)
-        }
-
-        // Get statistics
-        let stats = try repository.getCacheStats()
-
-        #expect(stats.totalCards == 10)
-        #expect(stats.freshCards == 5)
-        #expect(stats.staleCards == 5)
-        #expect(stats.stalePercentage == 50.0)
-        #expect(stats.freshPercentage == 50.0)
+        #expect(result == nil)
     }
 
     @Test("Clear all cached prices")
-    func clearAll() async throws {
-        // Add some cards
+    func clearAllPrices() async throws {
         for i in 1...5 {
             let card = CachedPrice(
                 cardID: "clear-\(i)",
@@ -192,44 +115,81 @@ struct PriceCacheTests {
         }
 
         // Verify they exist
-        let before = try repository.getAllPrices()
-        #expect(before.count >= 5)
+        #expect(try repository.getPrice(cardID: "clear-1") != nil)
 
         // Clear all
-        try repository.clearAll()
+        repository.clearAll()
 
         // Verify all gone
-        let after = try repository.getAllPrices()
-        #expect(after.count == 0)
+        #expect(try repository.getPrice(cardID: "clear-1") == nil)
+        #expect(try repository.getPrice(cardID: "clear-5") == nil)
     }
 
-    @Test("Stale prices detected correctly")
-    func stalePriceDetection() async throws {
-        // Add fresh card
-        let freshCard = CachedPrice(
-            cardID: "fresh-card",
-            cardName: "Fresh Card",
+    @Test("Condition prices can be set on cached price")
+    func conditionPricesCanBeSet() async throws {
+        let price = CachedPrice(
+            cardID: "cond-test",
+            cardName: "Test",
+            setName: "Test",
+            setID: "test",
+            cardNumber: "1",
+            marketPrice: 100.00
+        )
+
+        #expect(price.conditionPrices == nil)
+
+        let conditions = ConditionPrices(
+            nearMint: 100.00,
+            lightlyPlayed: 85.00,
+            moderatelyPlayed: 70.00,
+            heavilyPlayed: 50.00,
+            damaged: 30.00
+        )
+        price.setConditionPrices(conditions)
+
+        #expect(price.conditionPrices != nil)
+        #expect(price.conditionPrices?.nearMint == 100.00)
+        #expect(price.conditionPrices?.lightlyPlayed == 85.00)
+    }
+
+    @Test("Price history can be set on cached price")
+    func priceHistoryCanBeSet() async throws {
+        let price = CachedPrice(
+            cardID: "hist-test",
+            cardName: "Test",
             setName: "Test",
             setID: "test",
             cardNumber: "1"
         )
-        try repository.savePrice(freshCard)
 
-        // Add stale card (30 hours old)
-        let staleCard = CachedPrice(
-            cardID: "stale-card",
-            cardName: "Stale Card",
+        #expect(price.priceHistory == nil)
+
+        let history = [
+            PricePoint(p: 90.00, t: Int(Date().addingTimeInterval(-86400).timeIntervalSince1970)),
+            PricePoint(p: 100.00, t: Int(Date().timeIntervalSince1970))
+        ]
+        price.setPriceHistory(history)
+
+        #expect(price.priceHistory?.count == 2)
+    }
+
+    @Test("CachedPrice stores all price tiers")
+    func allPriceTiersStored() async throws {
+        let price = CachedPrice(
+            cardID: "tiers-test",
+            cardName: "Test",
             setName: "Test",
             setID: "test",
-            cardNumber: "2"
+            cardNumber: "1",
+            marketPrice: 100.00,
+            lowPrice: 80.00,
+            midPrice: 95.00,
+            highPrice: 120.00
         )
-        staleCard.lastUpdated = Calendar.current.date(byAdding: .hour, value: -30, to: Date())!
-        try repository.savePrice(staleCard)
 
-        // Fetch stale prices
-        let stalePrices = try repository.getStalePrices(olderThanHours: 24)
-
-        #expect(stalePrices.count == 1)
-        #expect(stalePrices.first?.cardID == "stale-card")
+        #expect(price.marketPrice == 100.00)
+        #expect(price.lowPrice == 80.00)
+        #expect(price.midPrice == 95.00)
+        #expect(price.highPrice == 120.00)
     }
 }

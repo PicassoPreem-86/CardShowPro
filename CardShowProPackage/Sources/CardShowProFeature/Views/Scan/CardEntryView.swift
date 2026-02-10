@@ -7,7 +7,7 @@ struct CardEntryView: View {
     let setID: String
     @Bindable var state: ScanFlowState
     @Environment(\.modelContext) private var modelContext
-    @State private var service = PokemonTCGService.shared
+    @State private var service = PricingService.shared
 
     // UI State
     @State private var isLoadingCard = false
@@ -117,15 +117,13 @@ struct CardEntryView: View {
             errorMessage = nil
 
             do {
-                let result = try await service.getCard(
-                    pokemonName: pokemonName,
-                    setID: setID,
+                let pricing = try await service.fetchPricing(
+                    cardName: pokemonName,
+                    setName: setName,
                     cardNumber: state.cardNumber
                 )
 
-                // Update state with fetched data
-                state.fetchedPrice = result.pricing.marketValue
-                state.cardImageURL = URL(string: result.card.images.large)
+                state.fetchedPrice = pricing.estimatedValue
 
             } catch {
                 errorMessage = "Could not fetch card details. Please try again."
@@ -150,10 +148,7 @@ struct CardEntryView: View {
             cardName: pokemonName,
             cardNumber: state.cardNumber,
             setName: setName,
-            marketValue: finalPrice,
-            purchaseCost: state.purchasePrice, // Pre-filled from buy price calculator
-            acquiredDate: Date(),
-            imageData: nil, // We'll download the image in the future
+            estimatedValue: finalPrice,
             confidence: 1.0 // Manual entry = 100% confidence
         )
 
@@ -414,21 +409,4 @@ private struct MarketPriceSection: View {
     }
 }
 
-// MARK: - CardCondition Extension
-
-extension CardCondition {
-    /// Price multipliers based on TCGPlayer market research (January 2025)
-    /// Research source: TCGPlayer condition pricing standards and market analysis
-    /// Near Mint is baseline (1.0x), other conditions are percentage reductions
-    var priceMultiplier: Double {
-        switch self {
-        case .mint: return 1.15           // Premium for pristine cards (15% above NM)
-        case .nearMint: return 1.0        // Baseline - TCGPlayer standard
-        case .excellent: return 0.80      // Lightly Played - 20% reduction (TCGPlayer: 70-90% range)
-        case .good: return 0.60           // Moderately Played - 40% reduction (TCGPlayer: 50-70% range)
-        case .played: return 0.30         // Heavily Played - 70% reduction (TCGPlayer: <30%)
-        case .poor: return 0.15           // Damaged - 85% reduction (market low)
-        }
-    }
-}
 

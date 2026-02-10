@@ -1,6 +1,6 @@
 import Foundation
 import SwiftData
-import SwiftUI
+import UIKit
 
 /// Persistent storage model for cards in the inventory
 @Model
@@ -10,59 +10,12 @@ public final class InventoryCard {
     public var cardNumber: String
     public var setName: String
     public var gameType: String = CardGame.pokemon.rawValue // Default for existing records
-
-    // Financial (renamed estimatedValue -> marketValue)
-    public var purchaseCost: Double?
-    public var marketValue: Double
-    public var lastPriceUpdate: Date
-
-    // Acquisition (renamed timestamp -> acquiredDate)
-    public var acquiredDate: Date
-    public var acquiredFrom: String?
-
-    // Details
-    public var conditionRawValue: String // Stores CardCondition.rawValue
-    public var variant: String
-    public var notes: String?
-    public var tags: [String]
-
-    // Computed property for CardCondition enum
-    public var condition: CardCondition {
-        get { CardCondition(rawValue: conditionRawValue) ?? .nearMint }
-        set { conditionRawValue = newValue.rawValue }
-    }
-
-    // Images
-    public var imageURL: String?
-    @Attribute(.externalStorage) public var imageData: Data?
-
-    // Grading (future)
-    public var isGraded: Bool
-    public var gradingCompany: String?
-    public var grade: Int?
-    public var certNumber: String?
-
-    // Legacy field for migration compatibility
+    public var estimatedValue: Double
     public var confidence: Double
+    public var timestamp: Date
 
-    // Computed Properties
-    public var profit: Double {
-        guard let cost = purchaseCost else { return 0 }
-        return marketValue - cost
-    }
-
-    public var profitMargin: Double {
-        guard let cost = purchaseCost, cost > 0 else { return 0 }
-        return (marketValue - cost) / cost
-    }
-
-    public var roi: Double {
-        profitMargin * 100
-    }
-
-    public var displayName: String {
-        "\(cardName) #\(cardNumber)"
-    }
+    // Store image as Data since SwiftData doesn't support UIImage directly
+    @Attribute(.externalStorage) public var imageData: Data?
 
     public init(
         id: UUID = UUID(),
@@ -70,72 +23,76 @@ public final class InventoryCard {
         cardNumber: String,
         setName: String,
         gameType: String = CardGame.pokemon.rawValue,
-        marketValue: Double,
-        purchaseCost: Double? = nil,
-        acquiredDate: Date = Date(),
-        acquiredFrom: String? = nil,
-        condition: CardCondition = .nearMint,
-        variant: String = "Standard",
-        notes: String? = nil,
-        tags: [String] = [],
-        imageURL: String? = nil,
-        imageData: Data? = nil,
-        isGraded: Bool = false,
-        gradingCompany: String? = nil,
-        grade: Int? = nil,
-        certNumber: String? = nil,
-        confidence: Double = 1.0,
-        lastPriceUpdate: Date = Date()
+        estimatedValue: Double,
+        confidence: Double,
+        timestamp: Date = Date(),
+        imageData: Data? = nil
     ) {
         self.id = id
         self.cardName = cardName
         self.cardNumber = cardNumber
         self.setName = setName
         self.gameType = gameType
-        self.marketValue = marketValue
-        self.purchaseCost = purchaseCost
-        self.acquiredDate = acquiredDate
-        self.acquiredFrom = acquiredFrom
-        self.conditionRawValue = condition.rawValue
-        self.variant = variant
-        self.notes = notes
-        self.tags = tags
-        self.imageURL = imageURL
-        self.imageData = imageData
-        self.isGraded = isGraded
-        self.gradingCompany = gradingCompany
-        self.grade = grade
-        self.certNumber = certNumber
+        self.estimatedValue = estimatedValue
         self.confidence = confidence
-        self.lastPriceUpdate = lastPriceUpdate
+        self.timestamp = timestamp
+        self.imageData = imageData
     }
 
     /// Convenience initializer from ScannedCard
-    @MainActor
-    convenience init(from scannedCard: ScannedCard) {
+    @MainActor convenience init(from scannedCard: ScannedCard) {
         self.init(
             id: scannedCard.id,
             cardName: scannedCard.name,
             cardNumber: scannedCard.cardNumber,
             setName: scannedCard.setName,
-            gameType: CardGame.pokemon.rawValue, // ScannedCard is Pokemon only for now
-            marketValue: scannedCard.marketPrice ?? 0.0,
-            acquiredDate: scannedCard.scannedAt,
-            imageData: nil, // ScannedCard uses imageURL, not UIImage
-            confidence: 0.0 // ScannedCard doesn't track confidence
+            gameType: CardGame.pokemon.rawValue,
+            estimatedValue: scannedCard.marketPrice ?? 0,
+            confidence: 1.0,
+            timestamp: scannedCard.timestamp,
+            imageData: nil
         )
     }
 
-    /// Convert to UIImage if data exists (iOS only)
-    #if canImport(UIKit)
+    /// Convert to UIImage if data exists
     public var image: UIImage? {
         guard let imageData else { return nil }
         return UIImage(data: imageData)
     }
-    #endif
 
     /// Get the CardGame enum from the stored string
     public var game: CardGame {
         CardGame(rawValue: gameType) ?? .pokemon
+    }
+
+    // MARK: - Convenience Aliases
+
+    /// Alias for estimatedValue used throughout the UI
+    public var marketValue: Double {
+        get { estimatedValue }
+        set { estimatedValue = newValue }
+    }
+
+    /// Alias for timestamp used throughout the UI
+    public var acquiredDate: Date {
+        get { timestamp }
+        set { timestamp = newValue }
+    }
+
+    // MARK: - Profit Tracking
+
+    /// Optional purchase cost for profit calculations
+    @Transient public var purchaseCost: Double? = nil
+
+    /// Calculated profit (market value minus purchase cost)
+    public var profit: Double {
+        guard let cost = purchaseCost else { return 0 }
+        return estimatedValue - cost
+    }
+
+    /// Return on investment percentage
+    public var roi: Double {
+        guard let cost = purchaseCost, cost > 0 else { return 0 }
+        return (profit / cost) * 100
     }
 }

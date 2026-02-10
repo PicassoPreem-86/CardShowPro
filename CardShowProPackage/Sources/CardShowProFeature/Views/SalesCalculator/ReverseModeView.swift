@@ -354,9 +354,9 @@ private struct ReverseCostField: View {
     @Previewable @State var model = SalesCalculatorModel()
     @Previewable @FocusState var focusedField: SalesCalculatorView.Field?
 
-    model.mode = .reverse
+    let _ = { model.mode = .reverse }()
 
-    return ScrollView {
+    ScrollView {
         ReverseModeView(model: model, focusedField: $focusedField)
     }
     .background(DesignSystem.Colors.backgroundPrimary)
@@ -366,12 +366,14 @@ private struct ReverseCostField: View {
     @Previewable @State var model = SalesCalculatorModel()
     @Previewable @FocusState var focusedField: SalesCalculatorView.Field?
 
-    model.mode = .reverse
-    model.cardCost = 50.00
-    model.shippingCost = 5.00
-    model.profitMode = .fixedAmount(15.00)
+    let _ = {
+        model.mode = .reverse
+        model.cardCost = 50.00
+        model.shippingCost = 5.00
+        model.profitMode = .fixedAmount(15.00)
+    }()
 
-    return ScrollView {
+    ScrollView {
         ReverseModeView(model: model, focusedField: $focusedField)
     }
     .background(DesignSystem.Colors.backgroundPrimary)

@@ -1,411 +1,128 @@
 import Foundation
-import OSLog
+import UIKit
 
-/// Service for interacting with PokemonTCG.io API
+/// Service for searching Pokemon TCG cards via the PokemonTCG.io API
+/// Provides card search, fuzzy matching, and detailed pricing retrieval
+@MainActor
 @Observable
-final class PokemonTCGService: @unchecked Sendable {
+final class PokemonTCGService {
     static let shared = PokemonTCGService()
 
-    private let networkService = NetworkService.shared
-    private let baseURL = "https://api.pokemontcg.io/v2"
-    private let logger = Logger(subsystem: "com.cardshowpro.app", category: "PokemonTCGService")
-
-    // MARK: - Configuration
-    // PokemonTCG.io API key (optional - higher rate limits with key)
-    private let apiKey = "" // Add your PokemonTCG.io API key here (optional)
-
-    // MARK: - State
-    var isLoading = false
-    var lastError: Error?
+    private let pricingService = PricingService.shared
 
     private init() {}
 
-    // MARK: - Public API
+    // MARK: - Card Search
 
-    /// Search for Pokemon with autocomplete
-    nonisolated func searchPokemon(_ query: String) async throws -> [PokemonSearchResult] {
-        guard !query.isEmpty else {
-            return []
+    /// Get a specific card by name, set ID, and card number
+    func getCard(pokemonName: String, setID: String, cardNumber: String) async throws -> (card: PokemonTCGResponse.PokemonTCGCard, pricing: CardPricing) {
+        let cards = try await pricingService.searchCards(name: pokemonName, setName: nil, number: cardNumber)
+        guard let card = cards.first else {
+            throw PricingError.cardNotFound
         }
-
-        logger.info("Searching for Pokemon: \(query)")
-
-        await MainActor.run { isLoading = true }
-        defer { Task { @MainActor in isLoading = false } }
-
-        // Search for cards matching the query - use wildcard for autocomplete
-        let searchQuery = "name:\(query)*"
-        let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
-
-        guard let url = URL(string: "\(baseURL)/cards?q=\(encodedQuery)&pageSize=20&orderBy=-set.releaseDate") else {
-            throw NetworkError.invalidURL
-        }
-
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
-
-        do {
-            let response: PokemonTCGResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
-
-            // Extract unique Pokemon names from results
-            var seenNames = Set<String>()
-            let results = response.data.compactMap { card -> PokemonSearchResult? in
-                guard !seenNames.contains(card.name) else { return nil }
-                seenNames.insert(card.name)
-
-                return PokemonSearchResult(
-                    id: card.id,
-                    name: card.name,
-                    imageURL: URL(string: card.images.small),
-                    availableSets: []
-                )
-            }
-
-            logger.info("Found \(results.count) Pokemon matching query")
-            return Array(results.prefix(10)) // Limit to 10 autocomplete results
-
-        } catch {
-            logger.error("Search failed: \(error.localizedDescription)")
-            await MainActor.run { lastError = error }
-            throw error
-        }
-    }
-
-    /// Get all sets for a specific Pokemon
-    nonisolated func getSetsForPokemon(_ pokemonName: String) async throws -> [CardSet] {
-        logger.info("Fetching sets for Pokemon: \(pokemonName)")
-
-        await MainActor.run { isLoading = true }
-        defer { Task { @MainActor in isLoading = false } }
-
-        let searchQuery = "name:\"\(pokemonName)\""
-        let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
-
-        guard let url = URL(string: "\(baseURL)/cards?q=\(encodedQuery)&orderBy=-set.releaseDate") else {
-            throw NetworkError.invalidURL
-        }
-
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
-
-        do {
-            let response: PokemonTCGResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
-
-            // Extract unique sets
-            var seenSetNames = Set<String>()
-            let sets = response.data.compactMap { card -> CardSet? in
-                let setName = card.set.name
-                guard !seenSetNames.contains(setName) else { return nil }
-                seenSetNames.insert(setName)
-
-                return CardSet(
-                    id: setName, // Using set name as ID for now
-                    name: setName,
-                    releaseDate: "", // API doesn't provide this in card endpoint
-                    logoURL: nil,
-                    total: card.set.printedTotal
-                )
-            }
-
-            logger.info("Found \(sets.count) sets for \(pokemonName)")
-            return sets
-
-        } catch {
-            logger.error("Failed to fetch sets: \(error.localizedDescription)")
-            await MainActor.run { lastError = error }
-            throw error
-        }
-    }
-
-    /// Search for cards by name and optional number (streamlined vendor flow)
-    nonisolated func searchCard(name: String, number: String?) async throws -> [CardMatch] {
-        guard !name.isEmpty else {
-            return []
-        }
-
-        logger.info("Searching for card: \(name), number: \(number ?? "none")")
-
-        await MainActor.run { isLoading = true }
-        defer { Task { @MainActor in isLoading = false } }
-
-        // Build search query
-        var queryParts: [String] = []
-        queryParts.append("name:\"\(name)\"")
-
-        // Add card number if provided
-        if let number = number, !number.isEmpty {
-            let cleanNumber = number
-                .replacingOccurrences(of: "#", with: "")
-                .trimmingCharacters(in: .whitespaces)
-            if !cleanNumber.isEmpty {
-                queryParts.append("number:\(cleanNumber)")
-            }
-        }
-
-        let query = queryParts.joined(separator: " ")
-        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-
-        guard let url = URL(string: "\(baseURL)/cards?q=\(encodedQuery)&pageSize=50&orderBy=-set.releaseDate") else {
-            throw NetworkError.invalidURL
-        }
-
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
-
-        do {
-            let response: PokemonTCGResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
-
-            // Convert to CardMatch objects
-            let matches = response.data.map { card in
-                CardMatch(
-                    id: card.id,
-                    cardName: card.name,
-                    setName: card.set.name,
-                    setID: card.set.id,
-                    cardNumber: card.number,
-                    imageURL: URL(string: card.images.small)
-                )
-            }
-
-            logger.info("Found \(matches.count) matching cards")
-            return matches
-
-        } catch {
-            logger.error("Card search failed: \(error.localizedDescription)")
-            await MainActor.run { lastError = error }
-            throw error
-        }
-    }
-
-    /// Get specific card with pricing by card ID
-    nonisolated func getCardByID(_ cardID: String) async throws -> (card: PokemonTCGResponse.PokemonTCGCard, pricing: CardPricing) {
-        logger.info("Fetching card by ID: \(cardID)")
-
-        await MainActor.run { isLoading = true }
-        defer { Task { @MainActor in isLoading = false } }
-
-        guard let url = URL(string: "\(baseURL)/cards/\(cardID)") else {
-            throw NetworkError.invalidURL
-        }
-
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
-
-        do {
-            let response: PokemonTCGSingleResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
-
-            // Extract pricing from the card
-            let pricing = extractPricing(from: response.data)
-
-            logger.info("Successfully fetched card and pricing")
-            return (response.data, pricing)
-
-        } catch {
-            logger.error("Failed to fetch card: \(error.localizedDescription)")
-            await MainActor.run { lastError = error }
-            throw error
-        }
-    }
-
-    /// Get detailed TCGPlayer pricing with all variants
-    nonisolated func getDetailedPricing(cardID: String) async throws -> DetailedTCGPlayerPricing {
-        logger.info("Fetching detailed pricing for card ID: \(cardID)")
-
-        await MainActor.run { isLoading = true }
-        defer { Task { @MainActor in isLoading = false } }
-
-        guard let url = URL(string: "\(baseURL)/cards/\(cardID)") else {
-            throw NetworkError.invalidURL
-        }
-
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
-
-        do {
-            let response: PokemonTCGSingleResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
-
-            // Extract ALL price variants from TCGPlayer data
-            let card = response.data
-            guard let tcgPlayer = card.tcgplayer?.prices else {
-                logger.error("No TCGPlayer pricing available for card")
-                throw PricingError.noPricingAvailable
-            }
-
-            // Convert to DetailedTCGPlayerPricing
-            let detailedPricing = DetailedTCGPlayerPricing(
-                normal: tcgPlayer.normal.map { convertToPriceBreakdown($0) },
-                holofoil: tcgPlayer.holofoil.map { convertToPriceBreakdown($0) },
-                reverseHolofoil: tcgPlayer.reverseHolofoil.map { convertToPriceBreakdown($0) },
-                firstEdition: tcgPlayer.firstEditionHolofoil.map { convertToPriceBreakdown($0) },
-                unlimited: tcgPlayer.unlimitedHolofoil.map { convertToPriceBreakdown($0) }
-            )
-
-            logger.info("Successfully fetched detailed pricing with \(detailedPricing.availableVariants.count) variants")
-            return detailedPricing
-
-        } catch {
-            logger.error("Failed to fetch detailed pricing: \(error.localizedDescription)")
-            await MainActor.run { lastError = error }
-            throw error
-        }
-    }
-
-    /// Get specific card with pricing (legacy method for backward compatibility)
-    nonisolated func getCard(pokemonName: String, setID: String, cardNumber: String) async throws -> (card: PokemonTCGResponse.PokemonTCGCard, pricing: CardPricing) {
-        logger.info("Fetching card: \(pokemonName) from set: \(setID), number: \(cardNumber)")
-
-        await MainActor.run { isLoading = true }
-        defer { Task { @MainActor in isLoading = false } }
-
-        // Build search query with all parameters
-        var queryParts: [String] = []
-        queryParts.append("name:\"\(pokemonName)\"")
-        queryParts.append("set.name:\"\(setID)\"")
-
-        // Clean card number (remove # and leading zeros)
-        let cleanNumber = cardNumber
-            .replacingOccurrences(of: "#", with: "")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "0"))
-
-        if !cleanNumber.isEmpty {
-            queryParts.append("number:\(cleanNumber)")
-        }
-
-        let query = queryParts.joined(separator: " ")
-        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-
-        guard let url = URL(string: "\(baseURL)/cards?q=\(encodedQuery)") else {
-            throw NetworkError.invalidURL
-        }
-
-        var headers: [String: String] = [:]
-        if !apiKey.isEmpty {
-            headers["X-Api-Key"] = apiKey
-        }
-
-        do {
-            let response: PokemonTCGResponse = try await networkService.get(
-                url: url,
-                headers: headers,
-                retryCount: 2
-            )
-
-            guard let card = response.data.first else {
-                logger.error("Card not found")
-                throw PricingError.cardNotFound
-            }
-
-            // Extract pricing from the card
-            let pricing = extractPricing(from: card)
-
-            logger.info("Successfully fetched card and pricing")
-            return (card, pricing)
-
-        } catch {
-            logger.error("Failed to fetch card: \(error.localizedDescription)")
-            await MainActor.run { lastError = error }
-            throw error
-        }
-    }
-
-    // MARK: - Helper Methods
-
-    /// Convert TCGPlayer PricePoint to DetailedTCGPlayerPricing.PriceBreakdown
-    private func convertToPriceBreakdown(_ pricePoint: PokemonTCGResponse.PokemonTCGCard.TCGPlayerPricing.PricePoint) -> DetailedTCGPlayerPricing.PriceBreakdown {
-        return DetailedTCGPlayerPricing.PriceBreakdown(
-            low: pricePoint.low,
-            mid: pricePoint.mid,
-            high: pricePoint.high,
-            market: pricePoint.market
-        )
-    }
-
-    /// Extract pricing from a card
-    private func extractPricing(from card: PokemonTCGResponse.PokemonTCGCard) -> CardPricing {
-        // Try TCGPlayer pricing first
-        if let tcgPlayer = card.tcgplayer?.prices,
-           let pricing = tcgPlayer.holofoil ?? tcgPlayer.normal ?? tcgPlayer.reverseHolofoil ?? tcgPlayer.unlimitedHolofoil ?? tcgPlayer.firstEditionHolofoil {
-            return CardPricing(
-                marketPrice: pricing.market,
-                lowPrice: pricing.low,
-                midPrice: pricing.mid,
-                highPrice: pricing.high,
-                directLowPrice: pricing.directLow,
-                source: .tcgPlayer,
-                lastUpdated: Date()
-            )
-        }
-
-        // Fall back to Cardmarket pricing
-        if let cardmarket = card.cardmarket?.prices {
-            return CardPricing(
-                marketPrice: cardmarket.averageSellPrice,
-                lowPrice: cardmarket.lowPrice,
-                midPrice: cardmarket.trendPrice,
-                highPrice: nil,
-                directLowPrice: nil,
-                source: .cardmarket,
-                lastUpdated: Date()
-            )
-        }
-
-        // No pricing available - return placeholder
-        return CardPricing(
-            marketPrice: nil,
-            lowPrice: nil,
-            midPrice: nil,
-            highPrice: nil,
+        let pricing = CardPricing(
+            marketPrice: card.tcgplayer?.prices?.normal?.market ?? card.tcgplayer?.prices?.holofoil?.market,
+            lowPrice: card.tcgplayer?.prices?.normal?.low ?? card.tcgplayer?.prices?.holofoil?.low,
+            midPrice: card.tcgplayer?.prices?.normal?.mid ?? card.tcgplayer?.prices?.holofoil?.mid,
+            highPrice: card.tcgplayer?.prices?.normal?.high ?? card.tcgplayer?.prices?.holofoil?.high,
             directLowPrice: nil,
             source: .pokemonTCG,
             lastUpdated: Date()
         )
+        return (card, pricing)
+    }
+
+    /// Search for cards with fuzzy name matching
+    func searchCardFuzzy(name: String, number: String? = nil) async throws -> [CardMatch] {
+        let cards = try await pricingService.searchCards(name: name, number: number)
+        return cards.map { card in
+            CardMatch(
+                id: card.id,
+                cardName: card.name,
+                setName: card.set.name,
+                setID: card.set.name,
+                cardNumber: card.number,
+                imageURL: URL(string: card.images.large)
+            )
+        }
+    }
+
+    /// Search for cards by exact name
+    func searchCard(name: String, number: String? = nil) async throws -> [CardMatch] {
+        try await searchCardFuzzy(name: name, number: number)
+    }
+
+    /// Get detailed pricing with variant breakdowns
+    func getDetailedPricing(cardID: String) async throws -> (DetailedTCGPlayerPricing, String?) {
+        let pricing = try await pricingService.fetchPricingByID(cardID)
+        let detailed = DetailedTCGPlayerPricing(
+            normal: pricing.marketPrice.map { DetailedTCGPlayerPricing.PriceBreakdown(low: pricing.lowPrice, mid: pricing.midPrice, high: pricing.highPrice, market: $0) },
+            holofoil: nil,
+            reverseHolofoil: nil,
+            firstEdition: nil,
+            unlimited: nil
+        )
+        return (detailed, nil)
     }
 }
 
-// MARK: - Configuration Helper
+// MARK: - CardMatch
 
-extension PokemonTCGService {
-    /// Check if API key is configured
-    var hasAPIKey: Bool {
-        !apiKey.isEmpty
+/// Represents a matched card from search results
+struct CardMatch: Identifiable, Sendable {
+    let id: String
+    let cardName: String
+    let setName: String
+    let setID: String
+    let cardNumber: String
+    let imageURL: URL?
+}
+
+// MARK: - DetailedTCGPlayerPricing
+
+/// Detailed pricing breakdown by variant type
+struct DetailedTCGPlayerPricing: Sendable {
+    let normal: PriceBreakdown?
+    let holofoil: PriceBreakdown?
+    let reverseHolofoil: PriceBreakdown?
+    let firstEdition: PriceBreakdown?
+    let unlimited: PriceBreakdown?
+
+    struct PriceBreakdown: Sendable {
+        let low: Double?
+        let mid: Double?
+        let high: Double?
+        let market: Double?
+
+        var displayPrice: String {
+            if let market { return "$\(String(format: "%.2f", market))" }
+            if let mid { return "$\(String(format: "%.2f", mid))" }
+            return "N/A"
+        }
     }
 
-    /// Get rate limit information
-    var rateLimitInfo: String {
-        if hasAPIKey {
-            return "API Key configured - higher rate limits"
-        } else {
-            return "No API key - 1000 requests/day limit"
-        }
+    var hasAnyPricing: Bool {
+        normal != nil || holofoil != nil || reverseHolofoil != nil || firstEdition != nil || unlimited != nil
+    }
+
+    struct VariantInfo {
+        let name: String
+        let pricing: PriceBreakdown
+    }
+
+    /// Best available market price across all variants
+    var bestAvailablePrice: Double? {
+        let variant = normal ?? holofoil ?? reverseHolofoil ?? firstEdition ?? unlimited
+        return variant?.market ?? variant?.mid
+    }
+
+    var availableVariants: [VariantInfo] {
+        var variants: [VariantInfo] = []
+        if let normal { variants.append(VariantInfo(name: "Normal", pricing: normal)) }
+        if let holofoil { variants.append(VariantInfo(name: "Holofoil", pricing: holofoil)) }
+        if let reverseHolofoil { variants.append(VariantInfo(name: "Reverse Holofoil", pricing: reverseHolofoil)) }
+        if let firstEdition { variants.append(VariantInfo(name: "1st Edition", pricing: firstEdition)) }
+        if let unlimited { variants.append(VariantInfo(name: "Unlimited", pricing: unlimited)) }
+        return variants
     }
 }

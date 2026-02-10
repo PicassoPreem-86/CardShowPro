@@ -47,6 +47,11 @@ struct ScanResultView: View {
                         confidenceWarning
                     }
 
+                    // OCR Diagnostic message when no card name detected
+                    if ocrResult.cardName == nil, let diagnostic = ocrResult.diagnosticMessage {
+                        ocrDiagnosticView(diagnostic)
+                    }
+
                     // Editable Fields
                     editableFields
 
@@ -111,6 +116,53 @@ struct ScanResultView: View {
         .padding(DesignSystem.Spacing.sm)
         .background(DesignSystem.Colors.warning.opacity(0.15))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm))
+    }
+
+    private func ocrDiagnosticView(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(DesignSystem.Colors.electricBlue)
+                Text("Could not detect card name")
+                    .font(DesignSystem.Typography.labelLarge)
+                    .fontWeight(.medium)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+            }
+
+            Text(message)
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+            if !ocrResult.rejectedCandidates.isEmpty {
+                DisclosureGroup("Rejected candidates") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(ocrResult.rejectedCandidates.prefix(5).enumerated()), id: \.offset) { _, candidate in
+                            HStack {
+                                Text("\"\(candidate.text)\"")
+                                    .font(DesignSystem.Typography.caption)
+                                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(candidate.reason)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+            }
+
+            Text("Try adjusting your photo or type the card name manually.")
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textTertiary)
+                .italic()
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.electricBlue.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
     }
 
     private var editableFields: some View {
@@ -404,7 +456,8 @@ struct ScanResultView: View {
 
         Task {
             do {
-                let results = try await pokemonService.searchCard(
+                // Use fuzzy search which tries exact first, then falls back to string distance matching
+                let results = try await pokemonService.searchCardFuzzy(
                     name: cardName.trimmingCharacters(in: .whitespaces),
                     number: cardNumber.isEmpty ? nil : cardNumber.trimmingCharacters(in: .whitespaces)
                 )
@@ -414,7 +467,7 @@ struct ScanResultView: View {
                     searchResults = results
 
                     if results.isEmpty {
-                        errorMessage = "No cards found matching '\(cardName)'. Try adjusting the name."
+                        errorMessage = "No cards found matching '\(cardName)'. Check spelling or try a different name."
                     } else if results.count == 1 {
                         // Auto-select single match
                         onLookupComplete(results[0])

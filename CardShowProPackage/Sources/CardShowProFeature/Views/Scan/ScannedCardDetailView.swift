@@ -35,22 +35,15 @@ struct ScannedCardDetailView: View {
                         .padding(.top, 12)
                         .padding(.horizontal, 16)
 
-                    // Market value section with trend
-                    marketValueSection
+                    // Action buttons
+                    actionButtons
                         .padding(.top, 20)
                         .padding(.horizontal, 16)
 
-                    // Buy price calculator (seller tool)
-                    BuyPriceCalculator(card: card)
-                        .padding(.top, 16)
+                    // Market value section
+                    marketValueSection
+                        .padding(.top, 24)
                         .padding(.horizontal, 16)
-
-                    // Market intelligence (7-day comps)
-                    MarketIntelligenceView(card: card) {
-                        showPriceHistory = true
-                    }
-                    .padding(.top, 16)
-                    .padding(.horizontal, 16)
 
                     // Price history chart
                     if let history = card.priceHistory, !history.isEmpty {
@@ -65,14 +58,19 @@ struct ScannedCardDetailView: View {
                             .padding(.top, 20)
                     }
 
-                    // Quick actions (Add to Inventory)
-                    quickActions
-                        .padding(.top, 24)
-                        .padding(.horizontal, 16)
-
                     // Attribution
                     attributionSection
                         .padding(.top, 16)
+                        .padding(.horizontal, 16)
+
+                    // Past sales section (placeholder)
+                    pastSalesSection
+                        .padding(.top, 24)
+                        .padding(.horizontal, 16)
+
+                    // Buy options section
+                    buyOptionsSection
+                        .padding(.top, 24)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 40)
                 }
@@ -202,26 +200,53 @@ struct ScannedCardDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Quick Actions
+    // MARK: - Action Buttons
 
-    private var quickActions: some View {
-        HStack(spacing: 12) {
-            // Add to Inventory (primary action for sellers)
+    private var actionButtons: some View {
+        VStack(spacing: 12) {
+            // Add to Collection button
             Button {
                 showAddToInventory = true
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "square.stack.3d.up.fill")
+                    Image(systemName: "folder.badge.plus")
                         .font(.system(size: 16, weight: .medium))
-                    Text("ADD TO INVENTORY")
+                    Text("ADD TO COLLECTION")
                         .font(.system(size: 14, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(accentGreen)
-                .foregroundStyle(.black)
+                .background(Color(white: 0.15))
+                .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+
+            // See Buying Options button
+            Button {
+                if let url = card.tcgPlayerBuyURL {
+                    openURL(url)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "cart")
+                        .font(.system(size: 16, weight: .medium))
+                    Text("SEE BUYING OPTIONS")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [Color.purple, Color.blue],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .disabled(card.tcgPlayerBuyURL == nil)
+            .opacity(card.tcgPlayerBuyURL == nil ? 0.5 : 1)
         }
     }
 
@@ -229,7 +254,7 @@ struct ScannedCardDetailView: View {
 
     private var marketValueSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with trend badge
+            // Header
             HStack {
                 Text("Market value")
                     .font(.system(size: 15, weight: .medium))
@@ -237,20 +262,18 @@ struct ScannedCardDetailView: View {
 
                 Spacer()
 
-                // Trend indicator badge
-                if let change7d = card.priceChange7d {
+                // Raw/Graded toggle (placeholder)
+                Menu {
+                    Button("Raw") { }
+                    Button("Graded PSA 10") { }
+                } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: card.priceTrend.icon)
-                            .font(.system(size: 10, weight: .semibold))
-
-                        Text(card.priceTrend.displayText)
-                            .font(.system(size: 12, weight: .semibold))
+                        Text("Raw")
+                            .font(.system(size: 13, weight: .medium))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundStyle(card.priceTrend == .rising ? .black : .white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(card.priceTrend.color)
-                    .clipShape(Capsule())
+                    .foregroundStyle(.white)
                 }
             }
 
@@ -429,6 +452,134 @@ struct ScannedCardDetailView: View {
         }
     }
 
+    // MARK: - Past Sales Section (Placeholder)
+
+    private var pastSalesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Past Sales")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Text("Coming Soon")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.gray)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color(white: 0.15))
+                    .clipShape(Capsule())
+            }
+
+            // Placeholder for past sales
+            VStack(spacing: 12) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 32))
+                    .foregroundStyle(.gray.opacity(0.5))
+
+                Text("eBay sales history coming soon")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.gray)
+
+                Text("Track actual sale prices to make better buying decisions")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.gray.opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+            .background(Color(white: 0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    // MARK: - Buy Options Section
+
+    private var buyOptionsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Buy Now")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+
+            VStack(spacing: 0) {
+                // TCGPlayer
+                buyOptionRow(
+                    name: "TCGPlayer",
+                    icon: "cart.fill",
+                    price: card.displayPrice,
+                    action: {
+                        if let url = card.tcgPlayerBuyURL {
+                            openURL(url)
+                        }
+                    }
+                )
+
+                Divider()
+                    .background(Color.white.opacity(0.1))
+
+                // eBay
+                buyOptionRow(
+                    name: "eBay",
+                    icon: "magnifyingglass",
+                    price: nil,
+                    subtitle: "View all listings",
+                    action: {
+                        let query = "\(card.name) \(card.setName) pokemon card".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        if let url = URL(string: "https://www.ebay.com/sch/i.html?_nkw=\(query)") {
+                            openURL(url)
+                        }
+                    }
+                )
+            }
+            .background(Color(white: 0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            // Disclaimer
+            Text("CardShow Pro may receive affiliate commissions from marketplace purchases.")
+                .font(.system(size: 11))
+                .foregroundStyle(.gray.opacity(0.6))
+        }
+    }
+
+    private func buyOptionRow(
+        name: String,
+        icon: String,
+        price: Double?,
+        subtitle: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.gray)
+                    .frame(width: 24)
+
+                Text(name)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                if let price = price {
+                    Text("from \(price.formatted(.currency(code: "USD")))")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(accentGreen)
+                } else if let subtitle = subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.gray)
+                }
+
+                Image(systemName: "arrow.up.forward")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.gray)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+    }
 
     // MARK: - Add to Inventory Sheet
 
@@ -438,9 +589,6 @@ struct ScannedCardDetailView: View {
             let _ = {
                 scanState.cardNumber = card.cardNumber
                 scanState.cardImageURL = card.imageURL
-                scanState.fetchedPrice = card.displayPrice
-                // Pre-fill buy price if seller entered one in calculator
-                scanState.purchasePrice = card.buyPrice
             }()
 
             CardEntryView(
