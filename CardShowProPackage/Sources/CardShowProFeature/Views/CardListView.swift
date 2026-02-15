@@ -13,9 +13,17 @@ public struct CardListView: View {
     @State private var showBulkDeleteAlert = false
     @State private var sortOption: SortOption = .acquiredDate
     @State private var profitFilter: ProfitFilter = .all
+    @State private var selectedStatus: StatusFilter = .inStock
     @State private var showSortSheet = false
     @State private var showFilterSheet = false
     @State private var navigateToScan = false
+
+    enum StatusFilter: String, CaseIterable {
+        case all = "All"
+        case inStock = "In Stock"
+        case listed = "Listed"
+        case sold = "Sold"
+    }
 
     enum ViewMode {
         case list
@@ -41,27 +49,24 @@ public struct CardListView: View {
         case lowROI = "ROI < 50%"
     }
 
-    // Mock category assignment - will be real field in model later
-    private func mockCategory(for card: InventoryCard) -> CardCategory {
-        if card.confidence > 0.9 {
-            return .graded
-        } else if card.cardName.contains("Box") || card.cardName.contains("Pack") {
-            return .sealed
-        } else if card.marketValue > 200 {
-            return .rawSingles
-        } else if card.marketValue < 50 {
-            return .misc
-        } else {
-            return .rawSingles
-        }
-    }
-
     var filteredCards: [InventoryCard] {
         var cards = inventoryCards
 
+        // Apply status filter
+        switch selectedStatus {
+        case .all:
+            break
+        case .inStock:
+            cards = cards.filter { $0.cardStatus == .inStock }
+        case .listed:
+            cards = cards.filter { $0.cardStatus == .listed }
+        case .sold:
+            cards = cards.filter { $0.cardStatus == .sold || $0.cardStatus == .shipped }
+        }
+
         // Apply category filter
         if selectedCategory != .allProduct {
-            cards = cards.filter { mockCategory(for: $0) == selectedCategory }
+            cards = cards.filter { $0.cardCategory == selectedCategory }
         }
 
         // Apply search
@@ -158,6 +163,38 @@ public struct CardListView: View {
                         averageROI: averageROI
                     )
                 }
+
+                // Status Filter Pills
+                HStack(spacing: 0) {
+                    ForEach(StatusFilter.allCases, id: \.self) { status in
+                        Button {
+                            withAnimation(.spring(response: 0.3)) {
+                                selectedStatus = status
+                            }
+                        } label: {
+                            Text(status.rawValue)
+                                .font(DesignSystem.Typography.captionBold)
+                                .padding(.horizontal, DesignSystem.Spacing.xs)
+                                .padding(.vertical, DesignSystem.Spacing.xxs)
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    selectedStatus == status
+                                        ? DesignSystem.Colors.cyan
+                                        : Color.clear
+                                )
+                                .foregroundStyle(
+                                    selectedStatus == status
+                                        ? DesignSystem.Colors.backgroundPrimary
+                                        : DesignSystem.Colors.textSecondary
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .background(DesignSystem.Colors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm))
+                .padding(.horizontal)
+                .padding(.top, DesignSystem.Spacing.xxs)
 
                 // Category Filter Pills
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -387,7 +424,7 @@ public struct CardListView: View {
                                 .font(.title3)
                                 .foregroundStyle(selectedCards.contains(card.id) ? DesignSystem.Colors.cyan : DesignSystem.Colors.textTertiary)
 
-                            InventoryCardRow(card: card, category: mockCategory(for: card))
+                            InventoryCardRow(card: card)
                         }
                     }
                     .buttonStyle(.plain)
@@ -395,7 +432,7 @@ public struct CardListView: View {
                     NavigationLink {
                         CardDetailView(card: card)
                     } label: {
-                        InventoryCardRow(card: card, category: mockCategory(for: card))
+                        InventoryCardRow(card: card)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
@@ -437,7 +474,7 @@ public struct CardListView: View {
                     NavigationLink {
                         CardDetailView(card: card)
                     } label: {
-                        InventoryCardGridItem(card: card, category: mockCategory(for: card))
+                        InventoryCardGridItem(card: card)
                     }
                     .buttonStyle(.plain)
                 }

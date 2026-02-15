@@ -9,32 +9,22 @@ struct CardDetailView: View {
     @State private var showDeleteAlert = false
     @State private var showShareSheet = false
     @State private var showZoomView = false
+    @State private var showSellSheet = false
+    @State private var showListedSheet = false
 
-    // Mock data for demo - will come from card in future
     private var purchasePrice: Double {
-        card.marketValue * 0.65 // Mock: 65% of market value
+        card.purchaseCost ?? 0
     }
 
     private var profit: Double {
-        card.marketValue - purchasePrice
+        card.profit
     }
 
     private var roi: Double {
-        (profit / purchasePrice) * 100
+        card.roi
     }
 
-    private var category: String {
-        // Mock category based on confidence - will be real field later
-        if card.confidence > 0.9 {
-            return "Graded"
-        } else if card.marketValue > 200 {
-            return "Raw Singles"
-        } else if card.cardName.contains("Box") || card.cardName.contains("Pack") {
-            return "Sealed"
-        } else {
-            return "Raw Singles"
-        }
-    }
+    private var category: CardCategory { card.cardCategory }
 
     var body: some View {
         ScrollView {
@@ -49,6 +39,9 @@ struct CardDetailView: View {
 
                     // Details
                     detailsSectionCard
+
+                    // Lifecycle status & actions
+                    lifecycleSection
 
                     // Notes
                     if !card.cardNumber.isEmpty {
@@ -85,6 +78,12 @@ struct CardDetailView: View {
             }
         } message: {
             Text("Are you sure you want to delete \(card.cardName)? This action cannot be undone.")
+        }
+        .sheet(isPresented: $showSellSheet) {
+            SellCardView(card: card)
+        }
+        .sheet(isPresented: $showListedSheet) {
+            MarkAsListedView(card: card)
         }
         .fullScreenCover(isPresented: $showZoomView) {
             if let image = card.image {
@@ -235,7 +234,7 @@ struct CardDetailView: View {
                     icon: "square.stack.3d.up.fill",
                     iconColor: categoryColor,
                     label: "Category",
-                    value: category
+                    value: category.rawValue
                 )
 
                 Divider()
@@ -335,6 +334,324 @@ struct CardDetailView: View {
         }
     }
 
+    // MARK: - Lifecycle Section
+
+    private var lifecycleSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Current Status Header
+            HStack {
+                Text("STATUS")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                StatusBadge(status: card.cardStatus)
+            }
+
+            VStack(spacing: 12) {
+                switch card.cardStatus {
+                case .inStock:
+                    inStockActions
+                case .listed:
+                    listedInfo
+                    listedActions
+                case .sold:
+                    soldDetails
+                    soldActions
+                case .shipped:
+                    shippedDetails
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.05), radius: 5)
+        }
+    }
+
+    // MARK: - In Stock Actions
+
+    private var inStockActions: some View {
+        VStack(spacing: DesignSystem.Spacing.xs) {
+            Button {
+                showListedSheet = true
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.xxs) {
+                    Image(systemName: "tag.fill")
+                        .font(.headline)
+                    Text("Mark as Listed")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(DesignSystem.Spacing.sm)
+                .background(DesignSystem.Colors.electricBlue)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            }
+
+            Button {
+                showSellSheet = true
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.xxs) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .font(.headline)
+                    Text("Mark as Sold")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(DesignSystem.Spacing.sm)
+                .background(DesignSystem.Colors.success)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            }
+        }
+    }
+
+    // MARK: - Listed Info
+
+    private var listedInfo: some View {
+        VStack(spacing: 8) {
+            if let platform = card.platform {
+                HStack {
+                    Text("Platform")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(platform)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
+                }
+            }
+
+            if let listingPrice = card.listingPrice {
+                HStack {
+                    Text("Listing Price")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("$\(String(format: "%.2f", listingPrice))")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundStyle(DesignSystem.Colors.electricBlue)
+                }
+            }
+
+            if let listedDate = card.listedDate {
+                HStack {
+                    Text("Listed On")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(formatDate(listedDate))
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                }
+            }
+
+            Divider()
+        }
+    }
+
+    // MARK: - Listed Actions
+
+    private var listedActions: some View {
+        VStack(spacing: DesignSystem.Spacing.xs) {
+            Button {
+                showSellSheet = true
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.xxs) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .font(.headline)
+                    Text("Mark as Sold")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(DesignSystem.Spacing.sm)
+                .background(DesignSystem.Colors.success)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            }
+
+            Button {
+                returnToStock()
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.xxs) {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.subheadline)
+                    Text("Return to Stock")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(DesignSystem.Spacing.xs)
+                .background(DesignSystem.Colors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            }
+        }
+    }
+
+    // MARK: - Sold Details
+
+    private var soldDetails: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundStyle(DesignSystem.Colors.success)
+                Text("SOLD")
+                    .font(DesignSystem.Typography.captionBold)
+                    .foregroundStyle(DesignSystem.Colors.success)
+                Spacer()
+                if let soldDate = card.soldDate {
+                    Text(formatDate(soldDate))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
+            if let soldPrice = card.soldPrice {
+                HStack {
+                    Text("Sold Price")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("$\(String(format: "%.2f", soldPrice))")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundStyle(DesignSystem.Colors.success)
+                }
+            }
+
+            if let platform = card.platform {
+                HStack {
+                    Text("Platform")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(platform)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
+                }
+            }
+
+            if let saleProfit = card.saleProfit {
+                Divider()
+                HStack {
+                    Text("Profit")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(saleProfit >= 0 ? "+$\(String(format: "%.2f", saleProfit))" : "-$\(String(format: "%.2f", abs(saleProfit)))")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundStyle(saleProfit >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Sold Actions
+
+    private var soldActions: some View {
+        Button {
+            markAsShipped()
+        } label: {
+            HStack(spacing: DesignSystem.Spacing.xxs) {
+                Image(systemName: "paperplane.fill")
+                    .font(.headline)
+                Text("Mark as Shipped")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(DesignSystem.Spacing.sm)
+            .background(DesignSystem.Colors.textSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+        }
+    }
+
+    // MARK: - Shipped Details
+
+    private var shippedDetails: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: "paperplane.fill")
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                Text("SHIPPED")
+                    .font(DesignSystem.Typography.captionBold)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                Spacer()
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(DesignSystem.Colors.success)
+                Text("Complete")
+                    .font(DesignSystem.Typography.captionBold)
+                    .foregroundStyle(DesignSystem.Colors.success)
+            }
+
+            Divider()
+
+            if let soldPrice = card.soldPrice {
+                HStack {
+                    Text("Sold Price")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("$\(String(format: "%.2f", soldPrice))")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundStyle(DesignSystem.Colors.success)
+                }
+            }
+
+            if let platform = card.platform {
+                HStack {
+                    Text("Platform")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(platform)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
+                }
+            }
+
+            if let soldDate = card.soldDate {
+                HStack {
+                    Text("Sold Date")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(formatDate(soldDate))
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                }
+            }
+
+            if let saleProfit = card.saleProfit {
+                Divider()
+                HStack {
+                    Text("Profit")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(saleProfit >= 0 ? "+$\(String(format: "%.2f", saleProfit))" : "-$\(String(format: "%.2f", abs(saleProfit)))")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundStyle(saleProfit >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error)
+                }
+            }
+        }
+    }
+
     // MARK: - Actions Section
     private var actionsSection: some View {
         VStack(spacing: 12) {
@@ -378,15 +695,7 @@ struct CardDetailView: View {
     }
 
     // MARK: - Helper Views
-    private var categoryColor: Color {
-        switch category {
-        case "Graded": return .yellow
-        case "Raw Singles": return .purple
-        case "Sealed": return .orange
-        case "Misc": return .gray
-        default: return .blue
-        }
-    }
+    private var categoryColor: Color { category.color }
 
     // MARK: - Helper Functions
     private func formatDate(_ date: Date) -> String {
@@ -394,6 +703,35 @@ struct CardDetailView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
+    }
+
+    private func returnToStock() {
+        card.status = CardStatus.inStock.rawValue
+        card.platform = nil
+        card.listingPrice = nil
+        card.listedDate = nil
+
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("Failed to save return to stock: \(error)")
+            #endif
+        }
+        HapticManager.shared.light()
+    }
+
+    private func markAsShipped() {
+        card.status = CardStatus.shipped.rawValue
+
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("Failed to save shipped status: \(error)")
+            #endif
+        }
+        HapticManager.shared.success()
     }
 
     private func deleteCard() {

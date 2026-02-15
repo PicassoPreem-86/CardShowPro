@@ -23,6 +23,15 @@ struct AddEditItemView: View {
     @State private var showImagePicker = false
     @State private var imagePickerSource: ImagePickerSource = .camera
 
+    // Acquisition
+    @State private var acquisitionSource: AcquisitionSource = .localPickup
+
+    // Grading (shown when category == .graded)
+    @State private var gradingService: GradingService = .psa
+    @State private var grade = ""
+    @State private var certNumber = ""
+    @State private var gradingCost = ""
+
     // Validation
     @State private var showValidationErrors = false
 
@@ -155,31 +164,35 @@ struct AddEditItemView: View {
                 // Pricing Section (MOVED TO FOURTH)
                 Section {
                     HStack {
-                        Text("$")
-                            .foregroundStyle(.secondary)
-                        TextField("0.00", text: $purchasePrice)
-                            .keyboardType(.decimalPad)
-                    }
-                    .overlay(alignment: .leading) {
                         Text("Purchase Price")
-                            .foregroundStyle(.clear)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        HStack(spacing: 2) {
+                            Text("$")
+                                .foregroundStyle(.secondary)
+                            TextField("0.00", text: $purchasePrice)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 120)
+                        }
                     }
 
                     HStack {
-                        Text("$")
-                            .foregroundStyle(.secondary)
-                        TextField("0.00", text: $marketValue)
-                            .keyboardType(.decimalPad)
-                            .overlay(alignment: .trailing) {
-                                if showValidationErrors && (Double(marketValue) ?? 0) <= 0 {
-                                    Image(systemName: "exclamationmark.circle.fill")
-                                        .foregroundStyle(.red)
-                                }
-                            }
-                    }
-                    .overlay(alignment: .leading) {
                         Text("Market Value")
-                            .foregroundStyle(.clear)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        HStack(spacing: 2) {
+                            Text("$")
+                                .foregroundStyle(.secondary)
+                            TextField("0.00", text: $marketValue)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 120)
+                        }
+                        if showValidationErrors && (Double(marketValue) ?? 0) <= 0 {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundStyle(.red)
+                        }
                     }
 
                     Stepper("Quantity: \(quantity)", value: $quantity, in: 1...999)
@@ -189,6 +202,51 @@ struct AddEditItemView: View {
                     if showValidationErrors && (Double(marketValue) ?? 0) <= 0 {
                         Text("Market value must be greater than $0")
                             .foregroundStyle(.red)
+                    }
+                }
+
+                // Acquisition Section
+                Section {
+                    Picker("Source", selection: $acquisitionSource) {
+                        ForEach(AcquisitionSource.allCases, id: \.self) { source in
+                            Text(source.rawValue).tag(source)
+                        }
+                    }
+                } header: {
+                    Text("ACQUISITION")
+                }
+
+                // Grading Section (only when category is Graded)
+                if selectedCategory == .graded {
+                    Section {
+                        Picker("Grading Service", selection: $gradingService) {
+                            ForEach(GradingService.allCases, id: \.self) { service in
+                                Text(service.rawValue).tag(service)
+                            }
+                        }
+
+                        TextField("Grade (e.g. 10, 9.5)", text: $grade)
+                            .autocorrectionDisabled()
+
+                        TextField("Cert Number", text: $certNumber)
+                            .autocorrectionDisabled()
+                            .keyboardType(.numberPad)
+
+                        HStack {
+                            Text("Grading Cost")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            HStack(spacing: 2) {
+                                Text("$")
+                                    .foregroundStyle(.secondary)
+                                TextField("0.00", text: $gradingCost)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(maxWidth: 120)
+                            }
+                        }
+                    } header: {
+                        Text("GRADING INFO")
                     }
                 }
 
@@ -237,17 +295,28 @@ struct AddEditItemView: View {
         marketValue = String(format: "%.2f", card.marketValue)
         selectedImage = card.image
 
-        // Mock values - will be real fields later
-        purchasePrice = String(format: "%.2f", card.marketValue * 0.65)
-        notes = "Card imported from scan"
+        // Load persisted fields
+        if let cost = card.purchaseCost {
+            purchasePrice = String(format: "%.2f", cost)
+        }
+        notes = card.notes
+        quantity = card.quantity
+        condition = card.cardCondition
+        selectedCategory = card.cardCategory
 
-        // Mock category based on confidence
-        if card.confidence > 0.9 {
-            selectedCategory = .graded
-        } else if card.marketValue > 200 {
-            selectedCategory = .rawSingles
-        } else {
-            selectedCategory = .rawSingles
+        // Acquisition source
+        if let source = card.cardAcquisitionSource {
+            acquisitionSource = source
+        }
+
+        // Grading info
+        if let service = card.cardGradingService {
+            gradingService = service
+        }
+        grade = card.grade ?? ""
+        certNumber = card.certNumber ?? ""
+        if let cost = card.gradingCost {
+            gradingCost = String(format: "%.2f", cost)
         }
     }
 
@@ -259,26 +328,65 @@ struct AddEditItemView: View {
         }
 
         let marketVal = Double(marketValue) ?? 0
+        let purchaseCostVal = Double(purchasePrice)
+        let gradingCostVal = Double(gradingCost)
+        let trimmedName = cardName.trimmingCharacters(in: .whitespaces)
+        let trimmedSet = setName.trimmingCharacters(in: .whitespaces)
+        let trimmedNumber = cardNumber.trimmingCharacters(in: .whitespaces)
 
         if let existingCard = cardToEdit {
             // Edit existing card
-            existingCard.cardName = cardName.trimmingCharacters(in: .whitespaces)
-            existingCard.setName = setName.trimmingCharacters(in: .whitespaces)
-            existingCard.cardNumber = cardNumber.trimmingCharacters(in: .whitespaces)
+            existingCard.cardName = trimmedName
+            existingCard.setName = trimmedSet
+            existingCard.cardNumber = trimmedNumber
             existingCard.marketValue = marketVal
+            existingCard.purchaseCost = purchaseCostVal
+            existingCard.category = selectedCategory.rawValue
+            existingCard.condition = condition.rawValue
+            existingCard.notes = notes
+            existingCard.quantity = quantity
+            existingCard.acquisitionSource = acquisitionSource.rawValue
             if let image = selectedImage {
                 existingCard.imageData = image.pngData()
+            }
+
+            // Grading fields
+            if selectedCategory == .graded {
+                existingCard.gradingService = gradingService.rawValue
+                existingCard.grade = grade.isEmpty ? nil : grade
+                existingCard.certNumber = certNumber.isEmpty ? nil : certNumber
+                existingCard.gradingCost = gradingCostVal
+            } else {
+                existingCard.gradingService = nil
+                existingCard.grade = nil
+                existingCard.certNumber = nil
+                existingCard.gradingCost = nil
             }
         } else {
             // Create new card
             let newCard = InventoryCard(
-                cardName: cardName.trimmingCharacters(in: .whitespaces),
-                cardNumber: cardNumber.trimmingCharacters(in: .whitespaces),
-                setName: setName.trimmingCharacters(in: .whitespaces),
+                cardName: trimmedName,
+                cardNumber: trimmedNumber,
+                setName: trimmedSet,
                 estimatedValue: marketVal,
-                confidence: 1.0, // Manual entry = 100% confidence
-                imageData: selectedImage?.pngData()
+                confidence: 1.0,
+                imageData: selectedImage?.pngData(),
+                purchaseCost: purchaseCostVal,
+                category: selectedCategory.rawValue,
+                condition: condition.rawValue,
+                notes: notes,
+                quantity: quantity,
+                acquisitionSource: acquisitionSource.rawValue
             )
+
+            // Grading fields
+            if selectedCategory == .graded {
+                newCard.gradingService = gradingService.rawValue
+                newCard.grade = grade.isEmpty ? nil : grade
+                newCard.certNumber = certNumber.isEmpty ? nil : certNumber
+                newCard.gradingCost = gradingCostVal
+            }
+
             modelContext.insert(newCard)
         }
 

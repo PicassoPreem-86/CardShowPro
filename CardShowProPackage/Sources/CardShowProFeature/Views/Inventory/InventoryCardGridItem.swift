@@ -3,7 +3,8 @@ import SwiftUI
 // MARK: - Inventory Card Grid Item
 struct InventoryCardGridItem: View {
     let card: InventoryCard
-    let category: CardCategory
+
+    private var category: CardCategory { card.cardCategory }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -44,6 +45,18 @@ struct InventoryCardGridItem: View {
                 .foregroundStyle(.white)
                 .clipShape(Circle())
                 .padding(8)
+
+                // Status Badge (non-inStock only)
+                if card.cardStatus != .inStock {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            StatusBadge(status: card.cardStatus)
+                                .padding(8)
+                            Spacer()
+                        }
+                    }
+                }
             }
 
             // Card Info

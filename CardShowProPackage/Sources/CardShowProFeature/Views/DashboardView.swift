@@ -4,23 +4,52 @@ import SwiftData
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @Query private var inventoryCards: [InventoryCard]
+    @Query private var transactions: [Transaction]
     @State private var showCamera = false
     @State private var showSettings = false
     @State private var showAddItem = false
+    @State private var showTransactions = false
     @State private var selectedPeriod = "1M"
     @State private var selectedTab = "Overview"
 
-    // Calculated stats from inventory
-    private var totalValue: Double {
-        inventoryCards.reduce(0) { $0 + $1.marketValue }
+    // Calculated stats from real inventory
+    private var activeCards: [InventoryCard] {
+        inventoryCards.filter { $0.isAvailable }
     }
 
-    private var totalCount: Int {
-        inventoryCards.count
+    private var totalValue: Double {
+        activeCards.reduce(0.0) { $0 + $1.marketValue }
+    }
+
+    private var totalCost: Double {
+        activeCards.reduce(0.0) { $0 + ($1.purchaseCost ?? 0) }
     }
 
     private var topCard: InventoryCard? {
-        inventoryCards.max(by: { $0.marketValue < $1.marketValue })
+        activeCards.max(by: { $0.marketValue < $1.marketValue })
+    }
+
+    private var saleTxns: [Transaction] {
+        transactions.filter { $0.transactionType == .sale }
+    }
+
+    private var totalRevenue: Double {
+        saleTxns.reduce(0.0) { $0 + $1.netAmount }
+    }
+
+    private var profitMargin: Double {
+        guard totalRevenue > 0 else { return 0 }
+        let totalSaleProfit = saleTxns.reduce(0.0) { $0 + $1.profit }
+        return (totalSaleProfit / totalRevenue) * 100
+    }
+
+    private var avgSale: Double {
+        guard !saleTxns.isEmpty else { return 0 }
+        return totalRevenue / Double(saleTxns.count)
+    }
+
+    private var slowStockCount: Int {
+        activeCards.filter { $0.daysInInventory >= 90 }.count
     }
 
     var body: some View {
@@ -28,39 +57,38 @@ struct DashboardView: View {
 
         NavigationStack {
             ZStack {
-                // Nebula background layer
                 NebulaBackgroundView()
 
-                // Content layer
                 VStack(spacing: 0) {
-                // Quick Actions Section - Fixed at top
-                quickActionsSection
-                    .padding(.horizontal)
-                    .padding(.top)
-                    .padding(.bottom, 4)
+                    quickActionsSection
+                        .padding(.horizontal)
+                        .padding(.top)
+                        .padding(.bottom, 4)
 
-                // Scrollable content below
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Business Health Overview
-                        DashboardBusinessHealthCard(
-                            selectedTab: $selectedTab,
-                            selectedPeriod: $selectedPeriod
-                        )
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            DashboardBusinessHealthCard(
+                                selectedTab: $selectedTab,
+                                selectedPeriod: $selectedPeriod
+                            )
 
-                        // Active Event Status (Show Mode)
-                        if appState.isShowModeActive {
-                            DashboardActiveEventSection()
+                            if appState.isShowModeActive {
+                                DashboardActiveEventSection()
+                            }
+
+                            salesPerformanceSection
+
+                            inventoryHealthSection
+
+                            topPerformersSection
+
+                            DashboardMarketMoversSection()
                         }
-
-                        // Category Breakdown
-                        DashboardMarketMoversSection()
+                        .padding(.horizontal)
+                        .padding(.top, 4)
+                        .padding(.bottom)
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 4)
-                    .padding(.bottom)
                 }
-            }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -85,6 +113,11 @@ struct DashboardView: View {
             .sheet(isPresented: $showAddItem) {
                 NavigationStack {
                     AddEditItemView(cardToEdit: nil)
+                }
+            }
+            .sheet(isPresented: $showTransactions) {
+                NavigationStack {
+                    TransactionHistoryView()
                 }
             }
         }
@@ -123,11 +156,11 @@ struct DashboardView: View {
                 }
 
                 QuickActionButton(
-                    title: "Total\nValue",
-                    icon: "dollarsign.circle.fill",
+                    title: "Trans-\nactions",
+                    icon: "arrow.left.arrow.right.circle.fill",
                     color: .orange
                 ) {
-                    // Show total value - already visible on dashboard
+                    showTransactions = true
                 }
             }
         }
@@ -144,28 +177,28 @@ struct DashboardView: View {
                 StatsCard(
                     icon: "dollarsign.circle.fill",
                     iconColor: .green,
-                    value: "$2,340",
-                    label: "Revenue This Week"
+                    value: formatCurrency(totalRevenue),
+                    label: "Total Revenue"
                 )
 
                 StatsCard(
                     icon: "cart.fill",
                     iconColor: .blue,
-                    value: "18",
+                    value: "\(saleTxns.count)",
                     label: "Transactions"
                 )
 
                 StatsCard(
                     icon: "chart.bar.fill",
                     iconColor: .cyan,
-                    value: "$130",
+                    value: formatCurrency(avgSale),
                     label: "Average Sale"
                 )
 
                 StatsCard(
                     icon: "percent",
                     iconColor: .orange,
-                    value: "34%",
+                    value: String(format: "%.0f%%", profitMargin),
                     label: "Profit Margin"
                 )
             }
@@ -183,29 +216,29 @@ struct DashboardView: View {
                 StatsCard(
                     icon: "square.stack.3d.up.fill",
                     iconColor: .blue,
-                    value: "$18,920",
+                    value: formatCurrency(totalValue),
                     label: "Total Value"
                 )
 
                 StatsCard(
                     icon: "dollarsign.square.fill",
                     iconColor: .purple,
-                    value: "$12,450",
+                    value: formatCurrency(totalCost),
                     label: "Cost Basis"
                 )
 
                 StatsCard(
                     icon: "arrow.triangle.2.circlepath",
                     iconColor: .cyan,
-                    value: "2.3x",
-                    label: "Turnover Rate"
+                    value: "\(activeCards.count)",
+                    label: "Active Cards"
                 )
 
                 StatsCard(
                     icon: "exclamationmark.triangle.fill",
                     iconColor: .orange,
-                    value: "12",
-                    label: "Dead Stock Alert"
+                    value: "\(slowStockCount)",
+                    label: "Slow Stock (90d+)"
                 )
             }
         }
@@ -213,7 +246,13 @@ struct DashboardView: View {
 
     // MARK: - Top Business Performers
     private var topPerformersSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let mostProfitable = activeCards.max(by: { $0.profit < $1.profit })
+        let soldCards = inventoryCards.filter { $0.isSold }
+        let topSet = Dictionary(grouping: activeCards, by: { $0.setName })
+            .max(by: { $0.value.reduce(0) { $0 + $1.profit } < $1.value.reduce(0) { $0 + $1.profit } })
+        let gradedSoldCount = soldCards.filter { $0.isGraded }.count
+
+        return VStack(alignment: .leading, spacing: 12) {
             Text("Top Performers")
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -221,40 +260,51 @@ struct DashboardView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 PerformerCard(
                     title: "Most Profitable",
-                    itemName: "Charizard VMAX",
-                    value: "$450",
+                    itemName: mostProfitable?.cardName ?? "N/A",
+                    value: formatCurrency(mostProfitable?.profit ?? 0),
                     subtitle: "profit",
                     icon: "trophy.fill",
                     iconColor: .yellow
                 )
 
                 PerformerCard(
-                    title: "Best Moving",
-                    itemName: "Graded PSA 10s",
-                    value: "15",
-                    subtitle: "sold this month",
+                    title: "Cards Sold",
+                    itemName: "\(soldCards.count) total",
+                    value: "\(soldCards.count)",
+                    subtitle: "all time",
                     icon: "flame.fill",
                     iconColor: .orange
                 )
 
                 PerformerCard(
                     title: "Top Set",
-                    itemName: "Base Set Unlimited",
-                    value: "$1,200",
+                    itemName: topSet?.key ?? "N/A",
+                    value: formatCurrency(topSet?.value.reduce(0) { $0 + $1.profit } ?? 0),
                     subtitle: "total profit",
                     icon: "star.fill",
                     iconColor: .cyan
                 )
 
                 PerformerCard(
-                    title: "Best Source",
-                    itemName: "Local Pickups",
-                    value: "67%",
-                    subtitle: "margin",
+                    title: "Graded Sold",
+                    itemName: "\(gradedSoldCount) cards",
+                    value: "\(gradedSoldCount)",
+                    subtitle: "graded sold",
                     icon: "location.fill",
                     iconColor: .green
                 )
             }
         }
+    }
+
+    // MARK: - Formatting
+
+    private func formatCurrency(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencySymbol = "$"
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: value)) ?? "$0"
     }
 }

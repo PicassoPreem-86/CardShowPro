@@ -42,8 +42,8 @@ struct ContactsView: View {
                         state.updateContact(updatedContact)
                     },
                     onDelete: {
-                        state.deleteContact(contact)
                         navigationPath.removeLast()
+                        state.deleteContact(contact)
                     }
                 )
             }

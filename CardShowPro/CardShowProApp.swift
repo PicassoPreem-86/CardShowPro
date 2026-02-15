@@ -9,6 +9,6 @@ struct CardShowProApp: App {
             ContentView()
                 .dynamicTypeSize(...DynamicTypeSize.accessibility3)
         }
-        .modelContainer(for: [InventoryCard.self])
+        .modelContainer(for: [InventoryCard.self, Transaction.self])
     }
 }

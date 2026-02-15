@@ -1,14 +1,56 @@
 import SwiftUI
+import SwiftData
+import Charts
 
 struct DashboardBusinessHealthCard: View {
     @Binding var selectedTab: String
     @Binding var selectedPeriod: String
+    @Query private var inventoryCards: [InventoryCard]
+    @Query private var transactions: [Transaction]
+    @State private var analyticsService = AnalyticsService()
+
+    private var activeCards: [InventoryCard] {
+        inventoryCards.filter { $0.isAvailable }
+    }
+
+    private var totalValue: Double {
+        activeCards.reduce(0.0) { $0 + $1.marketValue }
+    }
+
+    private var totalCost: Double {
+        activeCards.reduce(0.0) { $0 + ($1.purchaseCost ?? 0) }
+    }
+
+    private var unrealizedProfit: Double {
+        totalValue - totalCost
+    }
+
+    private var trendPoints: [TimeSeriesDataPoint] {
+        let data = analyticsService.computeAnalytics(cards: inventoryCards, transactions: transactions)
+        let points = data.portfolioTrend.dataPoints
+        switch selectedPeriod {
+        case "1D": return Array(points.suffix(1))
+        case "7D": return Array(points.suffix(7))
+        case "1M": return Array(points.suffix(30))
+        case "3M": return Array(points.suffix(90))
+        case "6M": return points
+        case "MAX": return points
+        default: return Array(points.suffix(30))
+        }
+    }
+
+    private var recentChange: Double {
+        let saleTxns = transactions.filter { $0.transactionType == .sale }
+        let calendar = Calendar.current
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let recentSales = saleTxns.filter { $0.date >= sevenDaysAgo }
+        return recentSales.reduce(0.0) { $0 + $1.profit }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header with toggle
             HStack {
-                // Toggle button
                 Button(action: {
                     withAnimation(.spring(response: 0.3)) {
                         selectedTab = selectedTab == "Overview" ? "Performance" : "Overview"
@@ -38,7 +80,6 @@ struct DashboardBusinessHealthCard: View {
 
                 Spacer()
 
-                // Currency indicator
                 HStack(spacing: 6) {
                     Circle()
                         .fill(Color.cyan)
@@ -56,7 +97,6 @@ struct DashboardBusinessHealthCard: View {
             // Main content
             VStack(alignment: .leading, spacing: 8) {
                 if selectedTab == "Overview" {
-                    // Overview tab content
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Portfolio")
@@ -69,25 +109,23 @@ struct DashboardBusinessHealthCard: View {
                         }
 
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text("$18,920")
+                            Text(formatCurrency(totalValue))
                                 .font(.system(size: 48, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
-
-                            Button(action: {}) {
-                                Image(systemName: "eye.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                            }
+                                .minimumScaleFactor(0.5)
+                                .lineLimit(1)
                         }
 
-                        Text("+$1,247.50 in the last 7 days")
+                        let changeText = recentChange >= 0
+                            ? "+\(formatCurrency(recentChange)) in the last 7 days"
+                            : "\(formatCurrency(recentChange)) in the last 7 days"
+                        Text(changeText)
                             .font(.subheadline)
                             .foregroundStyle(.cyan)
                     }
                     .frame(height: 140, alignment: .top)
                     .padding(.horizontal, 20)
                 } else {
-                    // Performance tab content
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
@@ -102,7 +140,6 @@ struct DashboardBusinessHealthCard: View {
 
                             Spacer()
 
-                            // Unrealized dropdown
                             HStack(spacing: 4) {
                                 Text("Unrealized")
                                     .font(.subheadline)
@@ -120,22 +157,18 @@ struct DashboardBusinessHealthCard: View {
                         }
 
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text("+$356.91")
+                            Text(formatSignedCurrency(unrealizedProfit))
                                 .font(.system(size: 48, weight: .bold, design: .rounded))
-                                .foregroundStyle(.cyan)
-
-                            Button(action: {}) {
-                                Image(systemName: "eye.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                            }
+                                .foregroundStyle(unrealizedProfit >= 0 ? .cyan : DesignSystem.Colors.error)
+                                .minimumScaleFactor(0.5)
+                                .lineLimit(1)
                         }
 
                         HStack(spacing: 16) {
-                            Text("Paid $1,295.00")
+                            Text("Paid \(formatCurrency(totalCost))")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                            Text("Market Value $1,651.91")
+                            Text("Market Value \(formatCurrency(totalValue))")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -144,52 +177,49 @@ struct DashboardBusinessHealthCard: View {
                     .padding(.horizontal, 20)
                 }
 
-                // Area chart placeholder
-                VStack(spacing: 0) {
-                    GeometryReader { geometry in
-                        ZStack(alignment: .bottom) {
-                            // Gradient fill
-                            Path { path in
-                                let width = geometry.size.width
-                                let height = geometry.size.height
-
-                                path.move(to: CGPoint(x: 0, y: height * 0.7))
-                                path.addLine(to: CGPoint(x: width * 0.25, y: height * 0.5))
-                                path.addLine(to: CGPoint(x: width * 0.5, y: height * 0.3))
-                                path.addLine(to: CGPoint(x: width * 0.75, y: height * 0.4))
-                                path.addLine(to: CGPoint(x: width, y: height * 0.2))
-                                path.addLine(to: CGPoint(x: width, y: height))
-                                path.addLine(to: CGPoint(x: 0, y: height))
-                                path.closeSubpath()
-                            }
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color.cyan.opacity(0.3),
-                                        Color.cyan.opacity(0.05)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
+                // Real area chart using Swift Charts
+                if trendPoints.count > 1 {
+                    Chart(trendPoints) { point in
+                        AreaMark(
+                            x: .value("Date", point.date),
+                            y: .value("Value", point.value)
+                        )
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    Color.cyan.opacity(0.3),
+                                    Color.cyan.opacity(0.05)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
                             )
+                        )
+                        .interpolationMethod(.catmullRom)
 
-                            // Line
-                            Path { path in
-                                let width = geometry.size.width
-                                let height = geometry.size.height
-
-                                path.move(to: CGPoint(x: 0, y: height * 0.7))
-                                path.addLine(to: CGPoint(x: width * 0.25, y: height * 0.5))
-                                path.addLine(to: CGPoint(x: width * 0.5, y: height * 0.3))
-                                path.addLine(to: CGPoint(x: width * 0.75, y: height * 0.4))
-                                path.addLine(to: CGPoint(x: width, y: height * 0.2))
-                            }
-                            .stroke(Color.cyan, lineWidth: 2.5)
-                        }
+                        LineMark(
+                            x: .value("Date", point.date),
+                            y: .value("Value", point.value)
+                        )
+                        .foregroundStyle(Color.cyan)
+                        .lineStyle(StrokeStyle(lineWidth: 2.5))
+                        .interpolationMethod(.catmullRom)
                     }
+                    .chartXAxis(.hidden)
+                    .chartYAxis(.hidden)
                     .frame(height: 160)
+                    .padding(.horizontal, 20)
+                } else {
+                    // Placeholder when no trend data
+                    Rectangle()
+                        .fill(DesignSystem.Colors.cardBackground.opacity(0.5))
+                        .frame(height: 160)
+                        .overlay {
+                            Text("Add cards to see chart")
+                                .font(DesignSystem.Typography.caption)
+                                .foregroundStyle(DesignSystem.Colors.textTertiary)
+                        }
+                        .padding(.horizontal, 20)
                 }
-                .padding(.horizontal, 20)
 
                 // Time period selector
                 HStack(spacing: 16) {
@@ -207,5 +237,21 @@ struct DashboardBusinessHealthCard: View {
             .background(DesignSystem.Colors.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 20))
         }
+    }
+
+    // MARK: - Formatting
+
+    private func formatCurrency(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencySymbol = "$"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
+    }
+
+    private func formatSignedCurrency(_ value: Double) -> String {
+        let formatted = formatCurrency(abs(value))
+        return value >= 0 ? "+\(formatted)" : "-\(formatted)"
     }
 }

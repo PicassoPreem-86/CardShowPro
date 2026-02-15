@@ -15,7 +15,7 @@ struct ProfitResultCard: View {
 
                 Spacer()
 
-                StatusBadge(status: result.profitStatus)
+                ProfitStatusBadge(status: result.profitStatus)
             }
 
             // HERO: Net Profit Amount
@@ -118,7 +118,7 @@ struct ProfitResultCard: View {
 
 // MARK: - Status Badge
 
-private struct StatusBadge: View {
+private struct ProfitStatusBadge: View {
     let status: ProfitStatus
 
     var body: some View {
