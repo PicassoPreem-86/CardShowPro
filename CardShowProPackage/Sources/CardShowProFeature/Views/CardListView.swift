@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 public struct CardListView: View {
-    @Query(sort: \InventoryCard.acquiredDate, order: .reverse) private var inventoryCards: [InventoryCard]
+    @Query(sort: \InventoryCard.timestamp, order: .reverse) private var inventoryCards: [InventoryCard]
     @Environment(\.modelContext) private var modelContext
     @State private var searchText = ""
     @State private var selectedCategory: CardCategory = .allProduct
