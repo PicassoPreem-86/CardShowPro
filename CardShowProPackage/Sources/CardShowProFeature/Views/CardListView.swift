@@ -343,7 +343,13 @@ public struct CardListView: View {
         for card in cardsToDelete {
             modelContext.delete(card)
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("Failed to save after bulk delete: \(error)")
+            #endif
+        }
         selectedCards.removeAll()
         isSelectionMode = false
     }
@@ -394,7 +400,13 @@ public struct CardListView: View {
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
                             modelContext.delete(card)
-                            try? modelContext.save()
+                            do {
+                                try modelContext.save()
+                            } catch {
+                                #if DEBUG
+                                print("Failed to save after swipe delete: \(error)")
+                                #endif
+                            }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }

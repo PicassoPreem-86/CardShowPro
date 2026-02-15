@@ -107,7 +107,10 @@ final class PricingService {
             queryParts.append("number:\(number)")
         }
 
-        let query = "q=" + queryParts.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+        guard let encodedQuery = queryParts.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw NetworkError.invalidURL
+        }
+        let query = "q=" + encodedQuery
 
         guard let url = URL(string: "\(baseURL)/cards?\(query)") else {
             throw NetworkError.invalidURL

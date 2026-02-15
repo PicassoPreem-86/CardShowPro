@@ -287,7 +287,9 @@ struct AddEditItemView: View {
             try modelContext.save()
             dismiss()
         } catch {
+            #if DEBUG
             print("Error saving card: \(error)")
+            #endif
         }
     }
 }

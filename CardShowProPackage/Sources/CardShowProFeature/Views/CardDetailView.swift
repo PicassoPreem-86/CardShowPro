@@ -398,7 +398,13 @@ struct CardDetailView: View {
 
     private func deleteCard() {
         modelContext.delete(card)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("Failed to save after delete: \(error)")
+            #endif
+        }
         dismiss()
     }
 

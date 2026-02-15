@@ -75,9 +75,8 @@ final class CardOCRService {
                         }
 
                         // Look for number patterns like "025/198" or "#025"
-                        let numberPattern = candidate.string.range(of: #"\d{1,3}(/\d{1,3})?"#, options: .regularExpression)
-                        if numberPattern != nil && bestNumber == nil {
-                            bestNumber = String(candidate.string[numberPattern!])
+                        if let numberPattern = candidate.string.range(of: #"\d{1,3}(/\d{1,3})?"#, options: .regularExpression), bestNumber == nil {
+                            bestNumber = String(candidate.string[numberPattern])
                         }
                     }
                 }

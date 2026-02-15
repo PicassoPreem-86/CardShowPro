@@ -40,16 +40,22 @@ struct PriceLookupService {
                 // Check if fresh (< 24 hours)
                 if !cachedPrice.isStale {
                     let duration = Date().timeIntervalSince(startTime)
+                    #if DEBUG
                     print("✅ CACHE HIT: \(cacheKey) (age: \(cachedPrice.ageInHours)h, duration: \(String(format: "%.2f", duration))s)")
+                    #endif
                     displayCachedResult(cachedPrice, state: state)
                     state.isLoading = false
                     return
                 } else {
+                    #if DEBUG
                     print("⚠️ STALE CACHE: \(cacheKey) (age: \(cachedPrice.ageInHours)h) - Refreshing...")
+                    #endif
                 }
             }
 
+            #if DEBUG
             print("❌ CACHE MISS: \(cacheKey) - Searching local database...")
+            #endif
 
             // LOCAL DATABASE SEARCH FIRST (fast <50ms)
             // Ensure database is initialized
@@ -64,7 +70,9 @@ struct PriceLookupService {
                 limit: 50
             )
             let localSearchTime = (CFAbsoluteTimeGetCurrent() - localSearchStart) * 1000
+            #if DEBUG
             print("🗄️ LOCAL DB: Found \(localMatches.count) matches in \(String(format: "%.1f", localSearchTime))ms")
+            #endif
 
             // Convert LocalCardMatch to CardMatch for UI
             let matches = localMatches.map { $0.toCardMatch() }
@@ -95,24 +103,32 @@ struct PriceLookupService {
             savePriceToCache(match: match, pricing: detailedPricing, cache: cache)
 
             let duration = Date().timeIntervalSince(startTime)
+            #if DEBUG
             print("⏱️ TOTAL LOOKUP: \(cacheKey) took \(String(format: "%.2f", duration))s (local: \(String(format: "%.0f", localSearchTime))ms)")
+            #endif
 
             state.addToRecentSearches(state.cardName)
             state.isLoading = false
 
             // Attempt to fetch JustTCG pricing in background
             if let fetchedTcgplayerId = tcgplayerId {
+                #if DEBUG
                 print("🔗 Found TCGPlayer ID: \(fetchedTcgplayerId) - fetching JustTCG pricing")
+                #endif
                 Task {
                     await fetchJustTCGPricing(tcgplayerId: fetchedTcgplayerId, cardID: match.id, state: state, cache: cache)
                 }
             } else {
+                #if DEBUG
                 print("⚠️ No TCGPlayer ID available - JustTCG pricing unavailable")
+                #endif
             }
 
         } catch {
             let duration = Date().timeIntervalSince(startTime)
+            #if DEBUG
             print("❌ LOOKUP FAILED: \(cacheKey) after \(String(format: "%.2f", duration))s - \(error)")
+            #endif
             state.errorMessage = errorMessage(for: error)
             state.isLoading = false
         }
@@ -133,7 +149,9 @@ struct PriceLookupService {
         // CACHE FIRST: Check cache for this specific match
         if let cachedPrice = try? cache.getPrice(cardID: match.id), !cachedPrice.isStale {
             let duration = Date().timeIntervalSince(startTime)
+            #if DEBUG
             print("✅ CACHE HIT (selectMatch): \(match.id) (age: \(cachedPrice.ageInHours)h, duration: \(String(format: "%.2f", duration))s)")
+            #endif
             displayCachedResult(cachedPrice, state: state)
             state.isLoading = false
             return
@@ -149,23 +167,31 @@ struct PriceLookupService {
             savePriceToCache(match: match, pricing: detailedPricing, cache: cache)
 
             let duration = Date().timeIntervalSince(startTime)
+            #if DEBUG
             print("⏱️ API LOOKUP (selectMatch): \(match.id) took \(String(format: "%.2f", duration))s")
+            #endif
 
             state.addToRecentSearches(state.cardName)
             state.isLoading = false
 
             // Attempt to fetch JustTCG pricing in background
             if let fetchedTcgplayerId = tcgplayerId {
+                #if DEBUG
                 print("🔗 Found TCGPlayer ID: \(fetchedTcgplayerId) - fetching JustTCG pricing")
+                #endif
                 Task {
                     await fetchJustTCGPricing(tcgplayerId: fetchedTcgplayerId, cardID: match.id, state: state, cache: cache)
                 }
             } else {
+                #if DEBUG
                 print("⚠️ No TCGPlayer ID available - JustTCG pricing unavailable")
+                #endif
             }
         } catch {
             let duration = Date().timeIntervalSince(startTime)
+            #if DEBUG
             print("❌ LOOKUP FAILED (selectMatch): \(match.id) after \(String(format: "%.2f", duration))s")
+            #endif
             state.errorMessage = errorMessage(for: error)
             state.isLoading = false
         }
@@ -175,12 +201,16 @@ struct PriceLookupService {
 
     func fetchJustTCGPricing(tcgplayerId: String, cardID: String, state: PriceLookupState, cache: PriceCacheRepository) async {
         guard justTCGService.isConfigured else {
+            #if DEBUG
             print("⚠️ JustTCG API not configured - skipping condition pricing")
+            #endif
             return
         }
 
         do {
+            #if DEBUG
             print("🔍 Fetching JustTCG pricing for TCGPlayer ID: \(tcgplayerId)")
+            #endif
             let justTCGCard = try await justTCGService.getCardPricing(
                 tcgplayerId: tcgplayerId,
                 includePriceHistory: true
@@ -189,13 +219,17 @@ struct PriceLookupService {
             // Update lookup state with JustTCG data
             let conditionPrices = ConditionPrices(from: justTCGCard.bestAvailableConditionPrices())
             state.conditionPrices = conditionPrices
+            #if DEBUG
             print("📊 JustTCG available printings: \(justTCGCard.availablePrintings), primary: \(justTCGCard.primaryPrinting)")
+            #endif
             state.priceChange7d = justTCGCard.priceChange7d
             state.priceChange30d = justTCGCard.priceChange30d
             state.priceHistory = justTCGCard.nearMintPriceHistory
             state.tcgplayerId = tcgplayerId
 
+            #if DEBUG
             print("✅ JustTCG pricing loaded: \(conditionPrices.availableConditions.count) conditions")
+            #endif
 
             // Update cache with JustTCG data
             if var cachedPrice = try? cache.getPrice(cardID: cardID) {
@@ -208,10 +242,14 @@ struct PriceLookupService {
                     cachedPrice.setPriceHistory(history)
                 }
                 try? cache.savePrice(cachedPrice)
+                #if DEBUG
                 print("💾 JustTCG data cached for: \(cardID)")
+                #endif
             }
         } catch {
+            #if DEBUG
             print("⚠️ JustTCG fetch failed: \(error.localizedDescription)")
+            #endif
             // Non-critical - we still have TCGPlayer pricing
         }
     }
@@ -307,9 +345,13 @@ struct PriceLookupService {
 
         do {
             try cache.savePrice(cachedPrice)
+            #if DEBUG
             print("💾 CACHED: \(match.id) (variants: \(pricing.availableVariants.map { $0.name }.joined(separator: ", ")))")
+            #endif
         } catch {
+            #if DEBUG
             print("⚠️ Failed to cache price: \(error)")
+            #endif
         }
     }
 

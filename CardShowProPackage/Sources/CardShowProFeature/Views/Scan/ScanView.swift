@@ -594,7 +594,9 @@ struct ScanView: View {
                 // 2b. FALLBACK: If rectified image failed to find card name, retry with original
                 // This helps with CJK cards where rectification downscaling loses detail
                 if ocrResult.cardName == nil && didRectify {
+                    #if DEBUG
                     print("🔤 DEBUG [Scan]: Rectified OCR failed, retrying with original high-res image...")
+                    #endif
                     ocrResult = try await ocrService.recognizeText(from: originalImage)
                 }
 
@@ -604,7 +606,7 @@ struct ScanView: View {
 
                 // FALLBACK: If no name found but we have a number, try number-only search
                 // This helps when OCR misreads CJK card names but gets the number right
-                if (cardName == nil || cardName!.isEmpty) && (cardNumber == nil || cardNumber!.isEmpty) {
+                if (cardName?.isEmpty ?? true) && (cardNumber?.isEmpty ?? true) {
                     await MainActor.run { scanProgress = .cardNotRecognized }
                     await showErrorToast("Card not recognized. Try better lighting or manual search.")
                     return
@@ -621,11 +623,13 @@ struct ScanView: View {
                     detectedLanguage = .english
                 }
 
+                #if DEBUG
                 if let name = cardName, !name.isEmpty {
                     print("🔍 OCR detected: '\(name)' #\(cardNumber ?? "none") (language: \(ocrResult.detectedLanguage.rawValue))")
                 } else if let number = cardNumber {
                     print("🔍 OCR detected number only: #\(number) (name recognition failed, will search by number)")
                 }
+                #endif
 
                 // 3. CARD RESOLUTION using CardResolver (handles exact lookup, FTS, and ambiguity)
                 await MainActor.run { scanProgress = .searchingDatabase }
@@ -636,7 +640,9 @@ struct ScanView: View {
 
                 if shouldUseLocal && dbReady {
                     do {
+                        #if DEBUG
                         print("🔍 Using CardResolver for intelligent card resolution...")
+                        #endif
 
                         // Build resolver input
                         let resolveInput = CardResolveInput(
@@ -654,11 +660,15 @@ struct ScanView: View {
                         case .single(let match):
                             // Single match found - proceed
                             matches = [match.toCardMatch()]
+                            #if DEBUG
                             print("✅ CardResolver found single match: \(match.cardName)")
+                            #endif
 
                         case .ambiguous(let candidates, let reason, let sets):
                             // Multiple candidates - show set picker UI
+                            #if DEBUG
                             print("❓ CardResolver found ambiguous results: \(reason)")
+                            #endif
                             await MainActor.run {
                                 self.ambiguousMatches = candidates
                                 self.suggestedSets = sets
@@ -668,25 +678,31 @@ struct ScanView: View {
 
                         case .none(let reason):
                             // No matches found in local database - will fall back to remote API
+                            #if DEBUG
                             print("⚠️ CardResolver found no matches: \(reason) - will try remote API")
+                            #endif
                             // Don't return here - let it fall through to remote API fallback
                         }
                     } catch {
+                        #if DEBUG
                         print("⚠️ CardResolver failed: \(error.localizedDescription)")
+                        #endif
                         // Will fall back to remote API
                     }
                 }
 
                 // 4. REMOTE API FALLBACK (only if local search found nothing and we have a valid name)
-                if matches.isEmpty && cardName != nil && !cardName!.isEmpty {
+                if matches.isEmpty, let name = cardName, !name.isEmpty {
+                    #if DEBUG
                     print("🌐 Local DB empty, falling back to remote API...")
+                    #endif
 
                     // Use fuzzy search since OCR can have slight errors
-                    matches = try await pokemonService.searchCardFuzzy(name: cardName!, number: cardNumber)
+                    matches = try await pokemonService.searchCardFuzzy(name: name, number: cardNumber)
 
                     // Try exact search as backup if fuzzy returns nothing
                     if matches.isEmpty {
-                        matches = try await pokemonService.searchCard(name: cardName!, number: cardNumber)
+                        matches = try await pokemonService.searchCard(name: name, number: cardNumber)
                     }
                 }
 
