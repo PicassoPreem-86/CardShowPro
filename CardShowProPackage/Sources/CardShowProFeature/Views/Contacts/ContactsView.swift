@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main contacts list view with search and FAB to add new contacts
+/// Main contacts list view — a dedicated business rolodex for the card trading space
 struct ContactsView: View {
     @State private var state = ContactsState()
     @State private var showingAddSheet = false
@@ -11,10 +11,21 @@ struct ContactsView: View {
             ZStack(alignment: .bottomTrailing) {
                 // Main Content
                 Group {
-                    if state.filteredContacts.isEmpty {
+                    if state.contacts.isEmpty && state.searchText.isEmpty {
                         emptyStateView
                     } else {
-                        contactsList
+                        VStack(spacing: 0) {
+                            // Type filter chips
+                            typeFilterBar
+                                .padding(.horizontal, DesignSystem.Spacing.md)
+                                .padding(.vertical, DesignSystem.Spacing.xs)
+
+                            if state.filteredContacts.isEmpty {
+                                noResultsView
+                            } else {
+                                contactsList
+                            }
+                        }
                     }
                 }
 
@@ -44,6 +55,43 @@ struct ContactsView: View {
         }
     }
 
+    // MARK: - Type Filter Bar
+
+    @ViewBuilder
+    private var typeFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignSystem.Spacing.xs) {
+                // "All" chip
+                FilterChip(
+                    label: "All",
+                    count: state.contacts.count,
+                    isSelected: state.selectedTypeFilter == nil,
+                    color: DesignSystem.Colors.textPrimary
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        state.selectedTypeFilter = nil
+                    }
+                }
+
+                ForEach(ContactType.allCases) { type in
+                    let count = state.count(for: type)
+                    if count > 0 {
+                        FilterChip(
+                            label: type.label,
+                            count: count,
+                            isSelected: state.selectedTypeFilter == type,
+                            color: type.color
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                state.selectedTypeFilter = state.selectedTypeFilter == type ? nil : type
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Contacts List
 
     @ViewBuilder
@@ -65,6 +113,42 @@ struct ContactsView: View {
         .scrollContentBackground(.hidden)
     }
 
+    // MARK: - No Results
+
+    @ViewBuilder
+    private var noResultsView: some View {
+        VStack(spacing: DesignSystem.Spacing.lg) {
+            Spacer()
+
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundStyle(DesignSystem.Colors.textTertiary)
+
+            VStack(spacing: DesignSystem.Spacing.xs) {
+                Text("No results")
+                    .font(DesignSystem.Typography.heading3)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+
+                if state.selectedTypeFilter != nil && !state.searchText.isEmpty {
+                    Text("Try a different search or filter")
+                        .font(DesignSystem.Typography.body)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                } else if state.selectedTypeFilter != nil {
+                    Text("No \(state.selectedTypeFilter!.label.lowercased()) contacts yet")
+                        .font(DesignSystem.Typography.body)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                } else {
+                    Text("Try a different search term")
+                        .font(DesignSystem.Typography.body)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(DesignSystem.Spacing.xl)
+    }
+
     // MARK: - Empty State
 
     @ViewBuilder
@@ -72,38 +156,36 @@ struct ContactsView: View {
         VStack(spacing: DesignSystem.Spacing.lg) {
             Spacer()
 
-            Image(systemName: state.searchText.isEmpty ? "person.3" : "magnifyingglass")
+            Image(systemName: "person.3")
                 .font(.system(size: 60))
                 .foregroundStyle(DesignSystem.Colors.textTertiary)
 
             VStack(spacing: DesignSystem.Spacing.xs) {
-                Text(state.searchText.isEmpty ? "No contacts yet" : "No results")
+                Text("Your Business Rolodex")
                     .font(DesignSystem.Typography.heading3)
                     .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-                Text(state.searchText.isEmpty ? "Add your first contact to get started" : "Try a different search term")
+                Text("Keep track of customers, vendors, and event directors you meet in the card business — separate from your personal contacts.")
                     .font(DesignSystem.Typography.body)
                     .foregroundStyle(DesignSystem.Colors.textSecondary)
                     .multilineTextAlignment(.center)
             }
 
-            if state.searchText.isEmpty {
-                Button {
-                    showingAddSheet = true
-                } label: {
-                    HStack {
-                        Image(systemName: "plus")
-                        Text("Add Contact")
-                    }
-                    .font(DesignSystem.Typography.labelLarge)
-                    .foregroundStyle(DesignSystem.Colors.backgroundPrimary)
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
-                    .padding(.vertical, DesignSystem.Spacing.sm)
-                    .background(DesignSystem.Colors.thunderYellow)
-                    .clipShape(Capsule())
+            Button {
+                showingAddSheet = true
+            } label: {
+                HStack {
+                    Image(systemName: "plus")
+                    Text("Add Contact")
                 }
-                .padding(.top, DesignSystem.Spacing.sm)
+                .font(DesignSystem.Typography.labelLarge)
+                .foregroundStyle(DesignSystem.Colors.backgroundPrimary)
+                .padding(.horizontal, DesignSystem.Spacing.lg)
+                .padding(.vertical, DesignSystem.Spacing.sm)
+                .background(DesignSystem.Colors.thunderYellow)
+                .clipShape(Capsule())
             }
+            .padding(.top, DesignSystem.Spacing.sm)
 
             Spacer()
         }
@@ -114,7 +196,7 @@ struct ContactsView: View {
 
     @ViewBuilder
     private var fabButton: some View {
-        if !state.filteredContacts.isEmpty || !state.searchText.isEmpty {
+        if !state.contacts.isEmpty {
             Button {
                 showingAddSheet = true
             } label: {
@@ -137,6 +219,53 @@ struct ContactsView: View {
     }
 }
 
+// MARK: - Filter Chip
+
+private struct FilterChip: View {
+    let label: String
+    let count: Int
+    let isSelected: Bool
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+
+                Text("\(count)")
+                    .font(.system(size: 11, weight: .bold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(
+                        isSelected
+                            ? Color.white.opacity(0.2)
+                            : DesignSystem.Colors.backgroundTertiary
+                    )
+                    .clipShape(Capsule())
+            }
+            .foregroundStyle(isSelected ? .white : DesignSystem.Colors.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                isSelected
+                    ? color
+                    : DesignSystem.Colors.cardBackground
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(
+                        isSelected ? Color.clear : DesignSystem.Colors.borderPrimary,
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Previews
 
 #Preview("With Contacts") {
@@ -144,47 +273,44 @@ struct ContactsView: View {
 }
 
 #Preview("Empty State") {
-    @Previewable @State var emptyState = ContactsState(contacts: [])
+    let _ = ContactsState(contacts: [])
     NavigationStack {
-        ZStack {
-            VStack(spacing: DesignSystem.Spacing.lg) {
-                Spacer()
+        VStack(spacing: DesignSystem.Spacing.lg) {
+            Spacer()
 
-                Image(systemName: "person.3")
-                    .font(.system(size: 60))
-                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+            Image(systemName: "person.3")
+                .font(.system(size: 60))
+                .foregroundStyle(DesignSystem.Colors.textTertiary)
 
-                VStack(spacing: DesignSystem.Spacing.xs) {
-                    Text("No contacts yet")
-                        .font(DesignSystem.Typography.heading3)
-                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+            VStack(spacing: DesignSystem.Spacing.xs) {
+                Text("Your Business Rolodex")
+                    .font(DesignSystem.Typography.heading3)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-                    Text("Add your first contact to get started")
-                        .font(DesignSystem.Typography.body)
-                        .foregroundStyle(DesignSystem.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                Button {
-                    // Action
-                } label: {
-                    HStack {
-                        Image(systemName: "plus")
-                        Text("Add Contact")
-                    }
-                    .font(DesignSystem.Typography.labelLarge)
-                    .foregroundStyle(DesignSystem.Colors.backgroundPrimary)
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
-                    .padding(.vertical, DesignSystem.Spacing.sm)
-                    .background(DesignSystem.Colors.thunderYellow)
-                    .clipShape(Capsule())
-                }
-                .padding(.top, DesignSystem.Spacing.sm)
-
-                Spacer()
+                Text("Keep track of customers, vendors, and event directors you meet in the card business.")
+                    .font(DesignSystem.Typography.body)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
             }
-            .padding(DesignSystem.Spacing.xl)
+
+            Button {
+            } label: {
+                HStack {
+                    Image(systemName: "plus")
+                    Text("Add Contact")
+                }
+                .font(DesignSystem.Typography.labelLarge)
+                .foregroundStyle(DesignSystem.Colors.backgroundPrimary)
+                .padding(.horizontal, DesignSystem.Spacing.lg)
+                .padding(.vertical, DesignSystem.Spacing.sm)
+                .background(DesignSystem.Colors.thunderYellow)
+                .clipShape(Capsule())
+            }
+            .padding(.top, DesignSystem.Spacing.sm)
+
+            Spacer()
         }
+        .padding(DesignSystem.Spacing.xl)
         .navigationTitle("Contacts")
         .background(DesignSystem.Colors.backgroundPrimary)
     }

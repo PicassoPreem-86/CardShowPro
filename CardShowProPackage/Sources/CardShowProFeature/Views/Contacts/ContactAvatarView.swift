@@ -4,16 +4,18 @@ import SwiftUI
 struct ContactAvatarView: View {
     let initials: String
     let size: CGSize
+    var color: Color
 
-    init(initials: String, size: CGSize = CGSize(width: 50, height: 50)) {
+    init(initials: String, size: CGSize = CGSize(width: 50, height: 50), color: Color = DesignSystem.Colors.electricBlue) {
         self.initials = initials
         self.size = size
+        self.color = color
     }
 
     var body: some View {
         ZStack {
             Circle()
-                .fill(DesignSystem.Colors.electricBlue)
+                .fill(color)
 
             Text(initials)
                 .font(.system(size: size.width * 0.4, weight: .semibold))

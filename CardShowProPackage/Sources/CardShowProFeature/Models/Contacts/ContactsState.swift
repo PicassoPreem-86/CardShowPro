@@ -7,27 +7,43 @@ import Observation
 final class ContactsState: Sendable {
     var contacts: [Contact]
     var searchText: String = ""
+    var selectedTypeFilter: ContactType?
 
     init(contacts: [Contact] = Contact.mockContacts) {
         self.contacts = contacts
     }
 
-    /// Filtered and sorted contacts based on search text
+    /// Filtered and sorted contacts based on search text and type filter
     var filteredContacts: [Contact] {
-        let filtered: [Contact]
-        if searchText.isEmpty {
-            filtered = contacts
-        } else {
+        var filtered = contacts
+
+        // Apply type filter
+        if let typeFilter = selectedTypeFilter {
+            filtered = filtered.filter { $0.contactType == typeFilter }
+        }
+
+        // Apply search
+        if !searchText.isEmpty {
             let searchLower = searchText.lowercased()
-            filtered = contacts.filter { contact in
+            filtered = filtered.filter { contact in
                 contact.name.lowercased().contains(searchLower) ||
                 contact.phone?.contains(searchText) == true ||
-                contact.email?.lowercased().contains(searchLower) == true
+                contact.email?.lowercased().contains(searchLower) == true ||
+                contact.socialMedia?.lowercased().contains(searchLower) == true ||
+                contact.collectingInterests?.lowercased().contains(searchLower) == true ||
+                contact.buyingPreferences?.lowercased().contains(searchLower) == true ||
+                contact.specialties?.lowercased().contains(searchLower) == true ||
+                contact.organization?.lowercased().contains(searchLower) == true
             }
         }
 
         // Sort by name alphabetically
         return filtered.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// Count of contacts for each type
+    func count(for type: ContactType) -> Int {
+        contacts.filter { $0.contactType == type }.count
     }
 
     /// Add a new contact
