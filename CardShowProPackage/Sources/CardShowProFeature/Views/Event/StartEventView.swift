@@ -264,6 +264,14 @@ struct StartEventView: View {
         )
         modelContext.insert(event)
 
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("StartEventView save failed: \(error)")
+            #endif
+        }
+
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         onEventStarted?(event)

@@ -332,6 +332,14 @@ struct EndEventReportView: View {
         event.endedAt = Date()
         event.isActive = false
 
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("EndEventReportView save failed: \(error)")
+            #endif
+        }
+
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
 
         dismiss()

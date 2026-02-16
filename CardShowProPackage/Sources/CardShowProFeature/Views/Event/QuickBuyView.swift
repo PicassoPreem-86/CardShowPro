@@ -309,6 +309,14 @@ struct QuickBuyView: View {
         )
         modelContext.insert(transaction)
 
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("QuickBuyView save failed: \(error)")
+            #endif
+        }
+
         // Haptic feedback
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
