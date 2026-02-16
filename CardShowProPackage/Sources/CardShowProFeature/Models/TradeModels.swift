@@ -8,6 +8,8 @@ struct TradeCard: Identifiable, Equatable, Sendable {
     let estimatedValue: Decimal
     let imageURL: URL?
     let isFromInventory: Bool
+    let condition: String?
+    let imageData: Data?
 
     init(
         id: UUID = UUID(),
@@ -15,7 +17,9 @@ struct TradeCard: Identifiable, Equatable, Sendable {
         setName: String? = nil,
         estimatedValue: Decimal,
         imageURL: URL? = nil,
-        isFromInventory: Bool
+        isFromInventory: Bool,
+        condition: String? = nil,
+        imageData: Data? = nil
     ) {
         self.id = id
         self.name = name
@@ -23,6 +27,8 @@ struct TradeCard: Identifiable, Equatable, Sendable {
         self.estimatedValue = estimatedValue
         self.imageURL = imageURL
         self.isFromInventory = isFromInventory
+        self.condition = condition
+        self.imageData = imageData
     }
 
     /// Alias for estimatedValue used in UI

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import SwiftUI
 
 // MARK: - Contact Type
@@ -114,33 +115,36 @@ enum PreferredContactMethod: String, CaseIterable, Identifiable, Codable, Sendab
 
 // MARK: - Contact Model
 
-/// Represents a business contact in the card trading space
-struct Contact: Identifiable, Equatable, Hashable, Sendable {
-    let id: UUID
-    var name: String
-    var contactType: ContactType
-    var phone: String?
-    var email: String?
-    var socialMedia: String?
-    var notes: String?
-    let createdAt: Date
-    var lastContactedAt: Date?
+/// Persistent storage model for a business contact in the card trading space
+@Model
+public final class Contact {
+    @Attribute(.unique) public var id: UUID
+    public var name: String
+
+    // Stored as String rawValue for SwiftData compatibility
+    public var contactType: String
+    public var phone: String?
+    public var email: String?
+    public var socialMedia: String?
+    public var notes: String?
+    public var createdAt: Date
+    public var lastContactedAt: Date?
 
     // Customer-specific
-    var collectingInterests: String?
-    var spendingTier: SpendingTier?
-    var preferredContactMethod: PreferredContactMethod?
+    public var collectingInterests: String?
+    public var spendingTier: String?
+    public var preferredContactMethod: String?
 
     // Buyer-specific
-    var buyingPreferences: String?
+    public var buyingPreferences: String?
 
     // Vendor-specific
-    var specialties: String?
+    public var specialties: String?
 
     // Event Director-specific
-    var organization: String?
-    var eventName: String?
-    var venue: String?
+    public var organization: String?
+    public var eventName: String?
+    public var venue: String?
 
     init(
         id: UUID = UUID(),
@@ -163,7 +167,7 @@ struct Contact: Identifiable, Equatable, Hashable, Sendable {
     ) {
         self.id = id
         self.name = name
-        self.contactType = contactType
+        self.contactType = contactType.rawValue
         self.phone = phone
         self.email = email
         self.socialMedia = socialMedia
@@ -171,8 +175,8 @@ struct Contact: Identifiable, Equatable, Hashable, Sendable {
         self.createdAt = createdAt
         self.lastContactedAt = lastContactedAt
         self.collectingInterests = collectingInterests
-        self.spendingTier = spendingTier
-        self.preferredContactMethod = preferredContactMethod
+        self.spendingTier = spendingTier?.rawValue
+        self.preferredContactMethod = preferredContactMethod?.rawValue
         self.buyingPreferences = buyingPreferences
         self.specialties = specialties
         self.organization = organization
@@ -180,8 +184,36 @@ struct Contact: Identifiable, Equatable, Hashable, Sendable {
         self.venue = venue
     }
 
+    // MARK: - Typed Enum Accessors
+
+    /// Get the ContactType enum from the stored string
+    var contactTypeEnum: ContactType {
+        get { ContactType(rawValue: contactType) ?? .other }
+        set { contactType = newValue.rawValue }
+    }
+
+    /// Get the SpendingTier enum from the stored string
+    var spendingTierEnum: SpendingTier? {
+        get {
+            guard let spendingTier else { return nil }
+            return SpendingTier(rawValue: spendingTier)
+        }
+        set { spendingTier = newValue?.rawValue }
+    }
+
+    /// Get the PreferredContactMethod enum from the stored string
+    var preferredContactMethodEnum: PreferredContactMethod? {
+        get {
+            guard let preferredContactMethod else { return nil }
+            return PreferredContactMethod(rawValue: preferredContactMethod)
+        }
+        set { preferredContactMethod = newValue?.rawValue }
+    }
+
+    // MARK: - Computed Properties
+
     /// Returns initials from the contact name (max 2 characters)
-    var initials: String {
+    public var initials: String {
         let components = name.split(separator: " ")
         if components.count >= 2 {
             let first = components[0].prefix(1)
@@ -195,18 +227,18 @@ struct Contact: Identifiable, Equatable, Hashable, Sendable {
     }
 
     /// Returns true if the contact has any contact method (phone, email, or social)
-    var hasContactMethod: Bool {
+    public var hasContactMethod: Bool {
         phone != nil || email != nil || socialMedia != nil
     }
 
     /// A short subtitle based on contact type
-    var subtitle: String? {
-        switch contactType {
+    public var subtitle: String? {
+        switch contactTypeEnum {
         case .customer:
             if let interests = collectingInterests, !interests.isEmpty {
                 return interests
             }
-            return spendingTier?.label
+            return spendingTierEnum?.label
         case .buyer:
             return buyingPreferences
         case .vendor:
@@ -222,6 +254,7 @@ struct Contact: Identifiable, Equatable, Hashable, Sendable {
 // MARK: - Mock Data
 
 extension Contact {
+    @MainActor
     static let mockContacts: [Contact] = [
         Contact(
             name: "John Smith",

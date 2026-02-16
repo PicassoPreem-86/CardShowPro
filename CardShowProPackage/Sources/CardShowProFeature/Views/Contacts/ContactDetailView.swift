@@ -1,15 +1,81 @@
+import SwiftData
 import SwiftUI
 
-/// Detail view showing complete contact information with quick actions
+/// Detail view showing complete contact information with quick actions and transaction history
 struct ContactDetailView: View {
-    let contact: Contact
-    let onUpdate: (Contact) -> Void
-    let onDelete: () -> Void
+    let contactID: UUID
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Query private var allContacts: [Contact]
+    @Query(sort: \Transaction.date, order: .reverse) private var allTransactions: [Transaction]
 
     @State private var showingEditSheet = false
     @State private var showingDeleteAlert = false
 
+    /// Resolve the contact from the query results by ID
+    private var contact: Contact? {
+        allContacts.first { $0.id == contactID }
+    }
+
+    /// Transactions linked to this contact
+    private var contactTransactions: [Transaction] {
+        allTransactions.filter { $0.contactId == contactID }
+    }
+
     var body: some View {
+        Group {
+            if let contact {
+                contactContent(contact)
+            } else {
+                ContentUnavailableView(
+                    "Contact Not Found",
+                    systemImage: "person.crop.circle.badge.xmark",
+                    description: Text("This contact may have been deleted.")
+                )
+            }
+        }
+        .background(DesignSystem.Colors.backgroundPrimary)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if contact != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingEditSheet = true
+                    } label: {
+                        Text("Edit")
+                            .fontWeight(.semibold)
+                    }
+                }
+
+                ToolbarItem(placement: .destructiveAction) {
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingEditSheet) {
+            if let contact {
+                AddEditContactView(contact: contact)
+            }
+        }
+        .alert("Delete Contact", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteContact()
+            }
+        } message: {
+            Text("Are you sure you want to delete \(contact?.name ?? "this contact")? This action cannot be undone.")
+        }
+    }
+
+    // MARK: - Contact Content
+
+    @ViewBuilder
+    private func contactContent(_ contact: Contact) -> some View {
         ScrollView {
             VStack(spacing: DesignSystem.Spacing.lg) {
                 // Header with avatar and type badge
@@ -17,79 +83,51 @@ struct ContactDetailView: View {
                     ContactAvatarView(
                         initials: contact.initials,
                         size: CGSize(width: 100, height: 100),
-                        color: contact.contactType.color
+                        color: contact.contactTypeEnum.color
                     )
 
                     Text(contact.name)
                         .font(DesignSystem.Typography.heading2)
                         .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-                    ContactTypeBadge(type: contact.contactType)
+                    ContactTypeBadge(type: contact.contactTypeEnum)
                 }
                 .padding(.top, DesignSystem.Spacing.lg)
 
                 // Quick Actions
                 if contact.hasContactMethod {
-                    quickActionsSection
+                    quickActionsSection(contact)
                 }
 
                 // Contact Information
-                contactInfoSection
+                contactInfoSection(contact)
 
                 // Type-specific details
-                typeSpecificSection
+                typeSpecificSection(contact)
 
                 // Notes
                 if let notes = contact.notes, !notes.isEmpty {
                     notesSection(notes)
                 }
 
+                // Transaction History
+                if !contactTransactions.isEmpty {
+                    transactionHistorySection
+                }
+
                 // Metadata
-                metadataSection
+                metadataSection(contact)
 
                 Spacer()
             }
             .padding(DesignSystem.Spacing.md)
-        }
-        .background(DesignSystem.Colors.backgroundPrimary)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingEditSheet = true
-                } label: {
-                    Text("Edit")
-                        .fontWeight(.semibold)
-                }
-            }
-
-            ToolbarItem(placement: .destructiveAction) {
-                Button(role: .destructive) {
-                    showingDeleteAlert = true
-                } label: {
-                    Image(systemName: "trash")
-                }
-            }
-        }
-        .sheet(isPresented: $showingEditSheet) {
-            AddEditContactView(contact: contact) { updatedContact in
-                onUpdate(updatedContact)
-            }
-        }
-        .alert("Delete Contact", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                onDelete()
-            }
-        } message: {
-            Text("Are you sure you want to delete \(contact.name)? This action cannot be undone.")
         }
     }
 
     // MARK: - Quick Actions
 
     @ViewBuilder
-    private var quickActionsSection: some View {
+    private func quickActionsSection(_ contact: Contact) -> some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Quick Actions")
                 .font(DesignSystem.Typography.caption)
@@ -131,7 +169,7 @@ struct ContactDetailView: View {
     // MARK: - Contact Info
 
     @ViewBuilder
-    private var contactInfoSection: some View {
+    private func contactInfoSection(_ contact: Contact) -> some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Contact Information")
                 .font(DesignSystem.Typography.caption)
@@ -165,24 +203,24 @@ struct ContactDetailView: View {
     // MARK: - Type-Specific Section
 
     @ViewBuilder
-    private var typeSpecificSection: some View {
-        switch contact.contactType {
+    private func typeSpecificSection(_ contact: Contact) -> some View {
+        switch contact.contactTypeEnum {
         case .customer:
-            customerDetailsSection
+            customerDetailsSection(contact)
         case .buyer:
-            buyerDetailsSection
+            buyerDetailsSection(contact)
         case .vendor:
-            vendorDetailsSection
+            vendorDetailsSection(contact)
         case .eventDirector:
-            eventDirectorDetailsSection
+            eventDirectorDetailsSection(contact)
         case .other:
             EmptyView()
         }
     }
 
     @ViewBuilder
-    private var customerDetailsSection: some View {
-        let hasCustomerData = contact.collectingInterests != nil || contact.spendingTier != nil || contact.preferredContactMethod != nil
+    private func customerDetailsSection(_ contact: Contact) -> some View {
+        let hasCustomerData = contact.collectingInterests != nil || contact.spendingTierEnum != nil || contact.preferredContactMethodEnum != nil
 
         if hasCustomerData {
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
@@ -194,13 +232,13 @@ struct ContactDetailView: View {
                 VStack(spacing: 0) {
                     if let interests = contact.collectingInterests, !interests.isEmpty {
                         InfoRow(label: "Collects", value: interests, icon: "sparkles")
-                        if contact.spendingTier != nil || contact.preferredContactMethod != nil {
+                        if contact.spendingTierEnum != nil || contact.preferredContactMethodEnum != nil {
                             Divider()
                                 .padding(.leading, DesignSystem.Spacing.xxl + DesignSystem.Spacing.sm)
                         }
                     }
 
-                    if let tier = contact.spendingTier {
+                    if let tier = contact.spendingTierEnum {
                         HStack(spacing: DesignSystem.Spacing.sm) {
                             Image(systemName: tier.icon)
                                 .font(.body)
@@ -222,13 +260,13 @@ struct ContactDetailView: View {
                         }
                         .padding(DesignSystem.Spacing.sm)
 
-                        if contact.preferredContactMethod != nil {
+                        if contact.preferredContactMethodEnum != nil {
                             Divider()
                                 .padding(.leading, DesignSystem.Spacing.xxl + DesignSystem.Spacing.sm)
                         }
                     }
 
-                    if let method = contact.preferredContactMethod, method != .noPreference {
+                    if let method = contact.preferredContactMethodEnum, method != .noPreference {
                         InfoRow(label: "Prefers", value: method.label, icon: method.icon)
                     }
                 }
@@ -239,7 +277,7 @@ struct ContactDetailView: View {
     }
 
     @ViewBuilder
-    private var buyerDetailsSection: some View {
+    private func buyerDetailsSection(_ contact: Contact) -> some View {
         if let prefs = contact.buyingPreferences, !prefs.isEmpty {
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
                 Text("Buyer Details")
@@ -257,7 +295,7 @@ struct ContactDetailView: View {
     }
 
     @ViewBuilder
-    private var vendorDetailsSection: some View {
+    private func vendorDetailsSection(_ contact: Contact) -> some View {
         if let specialties = contact.specialties, !specialties.isEmpty {
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
                 Text("Vendor Details")
@@ -275,7 +313,7 @@ struct ContactDetailView: View {
     }
 
     @ViewBuilder
-    private var eventDirectorDetailsSection: some View {
+    private func eventDirectorDetailsSection(_ contact: Contact) -> some View {
         let hasEventData = contact.organization != nil || contact.eventName != nil || contact.venue != nil
 
         if hasEventData {
@@ -334,10 +372,43 @@ struct ContactDetailView: View {
         }
     }
 
+    // MARK: - Transaction History
+
+    @ViewBuilder
+    private var transactionHistorySection: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            HStack {
+                Text("Transaction History")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                Spacer()
+
+                Text("\(contactTransactions.count)")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+            }
+            .padding(.horizontal, DesignSystem.Spacing.xs)
+
+            VStack(spacing: 0) {
+                ForEach(Array(contactTransactions.enumerated()), id: \.element.id) { index, transaction in
+                    ContactTransactionRow(transaction: transaction)
+
+                    if index < contactTransactions.count - 1 {
+                        Divider()
+                            .padding(.leading, DesignSystem.Spacing.xxl + DesignSystem.Spacing.sm)
+                    }
+                }
+            }
+            .background(DesignSystem.Colors.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+        }
+    }
+
     // MARK: - Metadata
 
     @ViewBuilder
-    private var metadataSection: some View {
+    private func metadataSection(_ contact: Contact) -> some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Details")
                 .font(DesignSystem.Typography.caption)
@@ -369,6 +440,19 @@ struct ContactDetailView: View {
 
     // MARK: - Actions
 
+    private func deleteContact() {
+        guard let contact else { return }
+        modelContext.delete(contact)
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("Failed to delete contact: \(error)")
+            #endif
+        }
+        dismiss()
+    }
+
     private func callContact(phone: String) {
         let cleanPhone = phone.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
         if let url = URL(string: "tel:\(cleanPhone)") {
@@ -387,6 +471,60 @@ struct ContactDetailView: View {
         if let url = URL(string: "mailto:\(email)") {
             UIApplication.shared.open(url)
         }
+    }
+}
+
+// MARK: - Transaction Row
+
+private struct ContactTransactionRow: View {
+    let transaction: Transaction
+
+    private var typeColor: Color {
+        switch transaction.transactionType {
+        case .sale: DesignSystem.Colors.success
+        case .purchase: DesignSystem.Colors.electricBlue
+        case .trade: DesignSystem.Colors.warning
+        case .consignment: DesignSystem.Colors.textSecondary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.sm) {
+            Image(systemName: transaction.transactionType.icon)
+                .font(.body)
+                .foregroundStyle(typeColor)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(transaction.transactionType.rawValue)
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                    Spacer()
+
+                    Text(transaction.date.formatted(date: .abbreviated, time: .omitted))
+                        .font(DesignSystem.Typography.captionSmall)
+                        .foregroundStyle(DesignSystem.Colors.textTertiary)
+                }
+
+                HStack {
+                    if !transaction.cardName.isEmpty {
+                        Text(transaction.cardName)
+                            .font(DesignSystem.Typography.body)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text(transaction.formattedAmount)
+                        .font(DesignSystem.Typography.labelLarge)
+                        .foregroundStyle(typeColor)
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.sm)
     }
 }
 
@@ -447,32 +585,9 @@ private struct InfoRow: View {
 
 // MARK: - Previews
 
-#Preview("Customer") {
+#Preview("Contact Detail") {
     NavigationStack {
-        ContactDetailView(
-            contact: Contact.mockContacts[0],
-            onUpdate: { _ in },
-            onDelete: { }
-        )
+        ContactDetailView(contactID: UUID())
     }
-}
-
-#Preview("Vendor") {
-    NavigationStack {
-        ContactDetailView(
-            contact: Contact.mockContacts[2],
-            onUpdate: { _ in },
-            onDelete: { }
-        )
-    }
-}
-
-#Preview("Event Director") {
-    NavigationStack {
-        ContactDetailView(
-            contact: Contact.mockContacts[3],
-            onUpdate: { _ in },
-            onDelete: { }
-        )
-    }
+    .modelContainer(for: [Contact.self, Transaction.self], inMemory: true)
 }

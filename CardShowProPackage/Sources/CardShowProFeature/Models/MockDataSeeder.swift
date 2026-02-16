@@ -475,6 +475,69 @@ public enum MockDataSeeder {
             context.insert(transaction)
         }
 
+        // MARK: - Contacts
+
+        let contacts: [Contact] = [
+            Contact(
+                name: "John Smith",
+                contactType: .customer,
+                phone: "555-0123",
+                email: "john.smith@example.com",
+                notes: "Always looking for deals on vintage sets. Prefers to meet at local shows.",
+                createdAt: calendar.date(byAdding: .day, value: -30, to: now)!,
+                lastContactedAt: calendar.date(byAdding: .day, value: -5, to: now),
+                collectingInterests: "Vintage Pokemon, Base Set holos",
+                spendingTier: .regular,
+                preferredContactMethod: .text
+            ),
+            Contact(
+                name: "Sarah Johnson",
+                contactType: .customer,
+                phone: "555-0456",
+                email: "sarah.j@example.com",
+                notes: "Collector of holographic cards, attends monthly shows",
+                createdAt: calendar.date(byAdding: .day, value: -60, to: now)!,
+                lastContactedAt: calendar.date(byAdding: .day, value: -2, to: now),
+                collectingInterests: "Holographic cards, Japanese imports",
+                spendingTier: .vip,
+                preferredContactMethod: .email
+            ),
+            Contact(
+                name: "Mike Chen",
+                contactType: .vendor,
+                phone: "555-0789",
+                socialMedia: "@mikecards_tcg",
+                notes: "Solid vendor to trade with. Fair prices on bulk.",
+                createdAt: calendar.date(byAdding: .day, value: -20, to: now)!,
+                specialties: "Modern Pokemon, bulk lots"
+            ),
+            Contact(
+                name: "Emily Davis",
+                contactType: .eventDirector,
+                email: "emily.davis@example.com",
+                notes: "Runs the monthly card show at the community center.",
+                createdAt: calendar.date(byAdding: .day, value: -10, to: now)!,
+                lastContactedAt: calendar.date(byAdding: .day, value: -1, to: now),
+                organization: "Metro Card Shows",
+                eventName: "Monthly Card Meetup",
+                venue: "Downtown Community Center"
+            ),
+            Contact(
+                name: "Tony Reeves",
+                contactType: .buyer,
+                phone: "555-0888",
+                socialMedia: "@tonybulkbuys",
+                notes: "Will take bulk lots off your hands. Cash only.",
+                createdAt: calendar.date(byAdding: .day, value: -15, to: now)!,
+                lastContactedAt: calendar.date(byAdding: .day, value: -4, to: now),
+                buyingPreferences: "Bulk commons, off-condition rares, unsorted lots"
+            )
+        ]
+
+        for contact in contacts {
+            context.insert(contact)
+        }
+
         // Save and mark as seeded
         do {
             try context.save()

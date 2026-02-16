@@ -8,7 +8,7 @@ struct CardShowProApp: App {
 
     init() {
         do {
-            modelContainer = try ModelContainer(for: InventoryCard.self, Transaction.self)
+            modelContainer = try ModelContainer(for: InventoryCard.self, Transaction.self, Contact.self, Event.self)
             MockDataSeeder.seedIfNeeded(context: modelContainer.mainContext)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")

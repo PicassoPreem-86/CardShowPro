@@ -49,12 +49,23 @@ public enum ListingCondition: String, CaseIterable, Identifiable, Sendable {
 /// Supported selling platforms with character limits and requirements
 public enum ListingPlatform: String, CaseIterable, Identifiable, Sendable {
     case ebay = "eBay"
-    case tcgplayer = "TCGplayer"
-    case facebook = "Facebook Marketplace"
-    case stockx = "StockX"
+    case tcgplayer = "TCGPlayer"
+    case facebook = "Facebook"
     case mercari = "Mercari"
+    case generic = "Generic"
 
     public var id: String { rawValue }
+
+    /// SF Symbol icon for the platform
+    public var iconName: String {
+        switch self {
+        case .ebay: return "cart.fill"
+        case .tcgplayer: return "gamecontroller.fill"
+        case .facebook: return "person.2.fill"
+        case .mercari: return "bag.fill"
+        case .generic: return "doc.text.fill"
+        }
+    }
 
     /// Title character limit for this platform
     public var titleCharLimit: Int {
@@ -62,8 +73,8 @@ public enum ListingPlatform: String, CaseIterable, Identifiable, Sendable {
         case .ebay: return 80
         case .tcgplayer: return 100
         case .facebook: return 100
-        case .stockx: return 80
         case .mercari: return 80
+        case .generic: return 200
         }
     }
 
@@ -73,19 +84,8 @@ public enum ListingPlatform: String, CaseIterable, Identifiable, Sendable {
         case .ebay: return 5000
         case .tcgplayer: return 1000
         case .facebook: return 5000
-        case .stockx: return 500
         case .mercari: return 1000
-        }
-    }
-
-    /// Icon name for platform
-    public var iconName: String {
-        switch self {
-        case .ebay: return "cart.fill"
-        case .tcgplayer: return "gamecontroller.fill"
-        case .facebook: return "person.2.fill"
-        case .stockx: return "chart.line.uptrend.xyaxis"
-        case .mercari: return "bag.fill"
+        case .generic: return 5000
         }
     }
 
@@ -98,10 +98,10 @@ public enum ListingPlatform: String, CaseIterable, Identifiable, Sendable {
             return "[Card Name] ([Set] [Card Number]) [Condition]"
         case .facebook:
             return "[Card Name] - [Set] Pokemon Card - [Condition]"
-        case .stockx:
-            return "[Card Name] - Pokemon [Set]"
         case .mercari:
             return "Pokemon [Card Name] [Set] [Condition]"
+        case .generic:
+            return "[Card Name] - [Set] #[Card Number]"
         }
     }
 }

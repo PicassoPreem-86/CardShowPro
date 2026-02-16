@@ -24,9 +24,22 @@ struct TradeCardRow: View {
                         .lineLimit(1)
                 }
 
-                Text(formatCurrency(card.marketValue))
-                    .font(DesignSystem.Typography.labelSmall)
-                    .foregroundStyle(DesignSystem.Colors.thunderYellow)
+                HStack(spacing: DesignSystem.Spacing.xxxs) {
+                    Text(formatCurrency(card.marketValue))
+                        .font(DesignSystem.Typography.labelSmall)
+                        .foregroundStyle(DesignSystem.Colors.thunderYellow)
+
+                    // Condition badge for inventory-sourced cards
+                    if let condition = card.condition {
+                        Text(condition)
+                            .font(DesignSystem.Typography.captionSmall)
+                            .foregroundStyle(DesignSystem.Colors.cyan)
+                            .padding(.horizontal, DesignSystem.Spacing.xxxs + 2)
+                            .padding(.vertical, 2)
+                            .background(DesignSystem.Colors.cyan.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                }
             }
 
             Spacer()
@@ -48,7 +61,15 @@ struct TradeCardRow: View {
 
     @ViewBuilder
     private var cardThumbnail: some View {
-        if let imageURL = card.imageURL {
+        if let imageData = card.imageData,
+           let uiImage = UIImage(data: imageData) {
+            // Inventory card with stored image
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 60, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm))
+        } else if let imageURL = card.imageURL {
             AsyncImage(url: imageURL) { phase in
                 switch phase {
                 case .empty:

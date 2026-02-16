@@ -10,7 +10,7 @@ struct ContactRowView: View {
             ContactAvatarView(
                 initials: contact.initials,
                 size: CGSize(width: 50, height: 50),
-                color: contact.contactType.color
+                color: contact.contactTypeEnum.color
             )
 
             // Contact Info
@@ -20,7 +20,7 @@ struct ContactRowView: View {
                         .font(DesignSystem.Typography.labelLarge)
                         .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-                    ContactTypeBadge(type: contact.contactType)
+                    ContactTypeBadge(type: contact.contactTypeEnum)
                 }
 
                 // Subtitle based on type
@@ -50,7 +50,7 @@ struct ContactRowView: View {
             Spacer()
 
             // Spending tier badge for customers
-            if contact.contactType == .customer, let tier = contact.spendingTier {
+            if contact.contactTypeEnum == .customer, let tier = contact.spendingTierEnum {
                 Image(systemName: tier.icon)
                     .font(.caption)
                     .foregroundStyle(tier.color)
@@ -85,17 +85,18 @@ struct ContactTypeBadge: View {
 
 // MARK: - Previews
 
-#Preview("Customer") {
-    ContactRowView(contact: Contact.mockContacts[0])
-        .background(DesignSystem.Colors.backgroundPrimary)
-}
-
-#Preview("Vendor") {
-    ContactRowView(contact: Contact.mockContacts[2])
-        .background(DesignSystem.Colors.backgroundPrimary)
-}
-
-#Preview("Event Director") {
-    ContactRowView(contact: Contact.mockContacts[3])
-        .background(DesignSystem.Colors.backgroundPrimary)
+#Preview("Contact Row") {
+    VStack {
+        ContactRowView(
+            contact: Contact(
+                name: "John Smith",
+                contactType: .customer,
+                phone: "555-0123",
+                collectingInterests: "Vintage Pokemon",
+                spendingTier: .vip
+            )
+        )
+    }
+    .background(DesignSystem.Colors.backgroundPrimary)
+    .modelContainer(for: Contact.self, inMemory: true)
 }

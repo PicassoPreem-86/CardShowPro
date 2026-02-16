@@ -1,245 +1,184 @@
 import Foundation
 
-/// Service for generating card listings using templates and mock AI
+/// Template-based listing generator for multiple selling platforms.
+/// Produces ready-to-paste card listing descriptions using InventoryCard data.
 @MainActor
-public final class ListingGeneratorService: Sendable {
+enum ListingGeneratorService {
 
-    public init() {}
+    // MARK: - Public API
 
-    /// Generate a listing for the given parameters
-    /// - Returns: Generated listing with title, description, and SEO analysis
-    public func generateListing(
-        card: InventoryCard,
+    /// Generate a listing description for the given card and platform.
+    static func generateListing(
+        for card: InventoryCard,
         platform: ListingPlatform,
-        condition: ListingCondition,
-        price: Double
-    ) async -> GeneratedListing {
-        // Simulate AI generation delay (2.5 seconds)
-        try? await Task.sleep(for: .seconds(2.5))
-
-        let title = generateTitle(card: card, platform: platform, condition: condition)
-        let description = generateDescription(card: card, condition: condition, price: price)
-        let keywords = extractKeywords(card: card, platform: platform)
-        let score = calculateOptimizationScore(title: title, description: description, keywords: keywords)
-
-        return GeneratedListing(
-            title: title,
-            description: description,
-            suggestedPrice: price,
-            seoKeywords: keywords,
-            optimizationScore: score,
-            platform: platform,
-            condition: condition
-        )
-    }
-
-    // MARK: - Title Generation
-
-    private func generateTitle(
-        card: InventoryCard,
-        platform: ListingPlatform,
-        condition: ListingCondition
+        includePrice: Bool,
+        includeShipping: Bool
     ) -> String {
-        let templates = getTitleTemplates(platform: platform)
-        let template = templates.randomElement() ?? templates[0]
-
-        return template
-            .replacingOccurrences(of: "[CARD_NAME]", with: card.cardName)
-            .replacingOccurrences(of: "[SET]", with: card.setName)
-            .replacingOccurrences(of: "[CONDITION]", with: condition.rawValue)
-            .replacingOccurrences(of: "[NUMBER]", with: card.cardNumber)
-    }
-
-    private func getTitleTemplates(platform: ListingPlatform) -> [String] {
         switch platform {
         case .ebay:
-            return [
-                "[CARD_NAME] - [SET] - [CONDITION] - Pokemon TCG",
-                "Pokemon [CARD_NAME] [SET] [CONDITION] Card",
-                "[CARD_NAME] [NUMBER]/[SET] Pokemon [CONDITION]"
-            ]
+            return generateEbayListing(card: card, includeShipping: includeShipping)
         case .tcgplayer:
-            return [
-                "[CARD_NAME] ([SET] [NUMBER]) [CONDITION]",
-                "[CARD_NAME] - [SET] [CONDITION]",
-                "[SET] [CARD_NAME] #[NUMBER] [CONDITION]"
-            ]
+            return generateTCGPlayerListing(card: card)
         case .facebook:
-            return [
-                "[CARD_NAME] - [SET] Pokemon Card - [CONDITION]",
-                "Pokemon [CARD_NAME] from [SET] - [CONDITION]",
-                "[CONDITION] [CARD_NAME] Pokemon Card ([SET])"
-            ]
-        case .stockx:
-            return [
-                "[CARD_NAME] - Pokemon [SET]",
-                "Pokemon [CARD_NAME] [SET] #[NUMBER]",
-                "[SET] [CARD_NAME] Pokemon Card"
-            ]
+            return generateFacebookListing(card: card, includePrice: includePrice)
         case .mercari:
-            return [
-                "Pokemon [CARD_NAME] [SET] [CONDITION]",
-                "[CARD_NAME] [CONDITION] - [SET]",
-                "[SET] [CARD_NAME] Pokemon TCG [CONDITION]"
-            ]
+            return generateMercariListing(card: card, includeShipping: includeShipping)
+        case .generic:
+            return generateGenericListing(card: card, includePrice: includePrice)
         }
     }
 
-    // MARK: - Description Generation
+    // MARK: - Condition Description
 
-    private func generateDescription(
-        card: InventoryCard,
-        condition: ListingCondition,
-        price: Double
-    ) -> String {
-        var sections: [String] = []
-
-        // Card Details
-        sections.append("""
-        **Card Details:**
-        - Name: \(card.cardName)
-        - Set: \(card.setName)
-        - Card Number: \(card.cardNumber)
-        - Condition: \(condition.rawValue)
-        """)
-
-        // Condition Notes
-        sections.append("""
-        **Condition Notes:**
-        \(condition.description)
-        """)
-
-        // Pricing
-        sections.append("""
-        **Pricing:**
-        Listed at $\(String(format: "%.2f", price)) based on current market value and condition.
-        """)
-
-        // Shipping & Handling
-        sections.append(getShippingSection())
-
-        // Authenticity & Guarantee
-        sections.append("""
-        **Authenticity:**
-        All cards are authentic Pokemon TCG products. Cards are stored in a smoke-free, pet-free environment.
-        """)
-
-        // Call to Action
-        sections.append("""
-        **Ready to Ship:**
-        This card will be carefully packaged and shipped within 1-2 business days. Questions? Feel free to reach out!
-        """)
-
-        return sections.joined(separator: "\n\n")
+    /// Returns a human-readable condition description based on the card's stored condition string.
+    private static func conditionDescription(for condition: String) -> String {
+        switch condition {
+        case "Mint":
+            return "Card is in pristine, pack-fresh condition with no visible wear."
+        case "Near Mint":
+            return "Card is in excellent condition with minimal to no wear."
+        case "Lightly Played":
+            return "Card shows minor wear including light edge whitening."
+        case "Moderately Played":
+            return "Card shows moderate wear. See photos for condition."
+        case "Heavily Played":
+            return "Card shows significant wear. Priced accordingly."
+        case "Damaged":
+            return "Card has notable damage. Please review photos carefully."
+        default:
+            return "See photos for condition details."
+        }
     }
 
-    private func getShippingSection() -> String {
-        let options = [
-            """
-            **Shipping:**
-            - Ships in a protective sleeve and toploader
-            - Packaged securely to prevent damage
-            - Fast, tracked shipping available
-            """,
-            """
-            **Shipping & Handling:**
-            - Protected in a penny sleeve and rigid toploader
-            - Shipped in a bubble mailer with cardboard reinforcement
-            - Tracking provided on all orders
-            """,
-            """
-            **Secure Shipping:**
-            - Card placed in sleeve and toploader for maximum protection
-            - Bubble wrapped and shipped in rigid mailer
-            - USPS First Class with tracking
-            """
-        ]
+    // MARK: - Grading Line Helpers
 
-        return options.randomElement() ?? options[0]
+    /// Returns a grading line like "PSA 10 - Cert #12345678" if the card is graded, otherwise nil.
+    private static func gradingLine(for card: InventoryCard) -> String? {
+        guard let service = card.gradingService, let grade = card.grade else { return nil }
+        if let cert = card.certNumber, !cert.isEmpty {
+            return "\(service) \(grade) - Cert #\(cert)"
+        }
+        return "\(service) \(grade)"
     }
 
-    // MARK: - SEO & Keywords
-
-    private func extractKeywords(card: InventoryCard, platform: ListingPlatform) -> [String] {
-        var keywords: [String] = []
-
-        // Card name components
-        let nameWords = card.cardName.split(separator: " ").map { String($0) }
-        keywords.append(contentsOf: nameWords)
-
-        // Set name
-        keywords.append(card.setName)
-
-        // Card number
-        keywords.append(card.cardNumber)
-
-        // Generic Pokemon keywords
-        keywords.append("Pokemon")
-        keywords.append("TCG")
-        keywords.append("Card")
-        keywords.append("Trading Card")
-
-        // Platform-specific
-        switch platform {
-        case .ebay:
-            keywords.append("Collectible")
-            keywords.append("Mint")
-        case .tcgplayer:
-            keywords.append("Single")
-            keywords.append("Game")
-        case .facebook:
-            keywords.append("Local")
-            keywords.append("Near Me")
-        case .stockx:
-            keywords.append("Verified")
-            keywords.append("Authentic")
-        case .mercari:
-            keywords.append("Fast Ship")
-            keywords.append("Deal")
-        }
-
-        // Remove duplicates and limit to top 10
-        return Array(Set(keywords)).prefix(10).map { $0 }
+    /// Returns a short grading label like "PSA 10" if the card is graded.
+    private static func gradingShort(for card: InventoryCard) -> String? {
+        guard let service = card.gradingService, let grade = card.grade else { return nil }
+        return "\(service) \(grade)"
     }
 
-    private func calculateOptimizationScore(
-        title: String,
-        description: String,
-        keywords: [String]
-    ) -> Int {
-        var score = 50 // Base score
+    // MARK: - Platform Templates
 
-        // Title length optimization (60-70 chars ideal)
-        if title.count >= 50 && title.count <= 80 {
-            score += 15
-        } else if title.count > 30 {
-            score += 5
+    private static func generateEbayListing(card: InventoryCard, includeShipping: Bool) -> String {
+        var lines: [String] = []
+
+        // Title line
+        lines.append("\(card.cardName) - \(card.setName) #\(card.cardNumber) Pokemon TCG")
+        lines.append("")
+
+        // Condition
+        lines.append("Condition: \(card.condition)")
+
+        // Grading (if applicable)
+        if let grading = gradingLine(for: card) {
+            lines.append(grading)
         }
 
-        // Description length (500-1000 chars ideal)
-        if description.count >= 400 && description.count <= 1200 {
-            score += 15
-        } else if description.count > 200 {
-            score += 5
+        lines.append("")
+
+        // Card Details block
+        lines.append("Card Details:")
+        lines.append("- Set: \(card.setName)")
+        lines.append("- Number: \(card.cardNumber)")
+        lines.append("- Condition: \(card.condition)")
+
+        if let grading = gradingShort(for: card) {
+            lines.append("- Grading: \(grading)")
         }
 
-        // Keyword usage (7-10 keywords ideal)
-        if keywords.count >= 7 && keywords.count <= 10 {
-            score += 10
-        } else if keywords.count >= 5 {
-            score += 5
+        lines.append("")
+
+        // Condition description
+        lines.append(conditionDescription(for: card.condition))
+
+        // Shipping
+        if includeShipping {
+            lines.append("")
+            lines.append("Shipping: Ships within 1 business day in penny sleeve + toploader.")
         }
 
-        // Bonus for structured formatting
-        if description.contains("**") {
-            score += 5 // Markdown formatting
+        lines.append("")
+        lines.append("Thank you for looking! Check out my other listings.")
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func generateTCGPlayerListing(card: InventoryCard) -> String {
+        var parts: [String] = []
+
+        parts.append("\(card.condition).")
+        parts.append(conditionDescription(for: card.condition))
+        parts.append("Ships in penny sleeve + toploader.")
+
+        if let service = card.gradingService, let grade = card.grade {
+            var gradeLine = "Graded \(service) \(grade)."
+            if let cert = card.certNumber, !cert.isEmpty {
+                gradeLine += " Cert #\(cert)."
+            }
+            parts.append(gradeLine)
         }
 
-        // Bonus for shipping info
-        if description.lowercased().contains("shipping") {
-            score += 5
+        return parts.joined(separator: " ")
+    }
+
+    private static func generateFacebookListing(card: InventoryCard, includePrice: Bool) -> String {
+        var lines: [String] = []
+
+        lines.append("\(card.cardName) from \(card.setName)")
+        lines.append("Condition: \(card.condition)")
+
+        if let grading = gradingShort(for: card) {
+            lines.append(grading)
         }
 
-        return min(score, 100)
+        if includePrice && card.estimatedValue > 0 {
+            lines.append("Price: $\(String(format: "%.2f", card.estimatedValue)) OBO")
+        }
+
+        lines.append("Local pickup available / Will ship for additional cost")
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func generateMercariListing(card: InventoryCard, includeShipping: Bool) -> String {
+        var lines: [String] = []
+
+        lines.append("\(card.cardName) - \(card.setName) #\(card.cardNumber)")
+        lines.append("Condition: \(card.condition)")
+
+        if let service = card.gradingService, let grade = card.grade {
+            lines.append("Professionally graded: \(service) \(grade)")
+        }
+
+        lines.append(conditionDescription(for: card.condition))
+
+        if includeShipping {
+            lines.append("Ships same day in protective packaging.")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func generateGenericListing(card: InventoryCard, includePrice: Bool) -> String {
+        var lines: [String] = []
+
+        lines.append("\(card.cardName) - \(card.setName) #\(card.cardNumber)")
+        lines.append("Condition: \(card.condition)")
+
+        if includePrice && card.estimatedValue > 0 {
+            lines.append("Price: $\(String(format: "%.2f", card.estimatedValue))")
+        }
+
+        return lines.joined(separator: "\n")
     }
 }

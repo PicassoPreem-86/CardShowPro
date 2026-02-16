@@ -4,135 +4,94 @@ struct ToolsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Nebula background layer
                 NebulaBackgroundView()
 
-                // Content layer
                 ScrollView {
-                VStack(spacing: 16) {
-                    // Trading & Analysis Tools
-                    ToolSection(title: "Trading & Analysis") {
-                        NavigationLink {
-                            TradeAnalyzerView()
-                        } label: {
-                            ToolRow(
-                                icon: "arrow.left.arrow.right.circle.fill",
-                                title: "Trade Analyzer",
-                                description: "Compare card values in trades",
-                                color: .blue,
-                                isComingSoon: false
-                            )
-                        }
-                        .buttonStyle(.plain)
+                    VStack(spacing: DesignSystem.Spacing.sm) {
+                        // Pricing & Analysis
+                        ToolSection(title: "Pricing & Analysis") {
+                            NavigationLink {
+                                SalesCalculatorView()
+                            } label: {
+                                ToolRow(
+                                    icon: "dollarsign.circle.fill",
+                                    title: "Sales Calculator",
+                                    description: "Calculate fees, shipping, and profit margins",
+                                    color: .green
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("sales-calculator-button")
 
-                        NavigationLink {
-                            AdvancedAnalyticsView()
-                        } label: {
-                            ToolRow(
-                                icon: "chart.line.uptrend.xyaxis",
-                                title: "Advanced Analytics",
-                                description: "View detailed portfolio insights and trends",
-                                color: .purple,
-                                isComingSoon: false
-                            )
-                        }
-                        .buttonStyle(.plain)
+                            NavigationLink {
+                                GradingROICalculatorView()
+                            } label: {
+                                ToolRow(
+                                    icon: "chart.bar.doc.horizontal.fill",
+                                    title: "Grading ROI Calculator",
+                                    description: "Calculate if grading is worth the cost",
+                                    color: .yellow
+                                )
+                            }
+                            .buttonStyle(.plain)
 
-                        NavigationLink {
-                            GradingROICalculatorView()
-                        } label: {
-                            ToolRow(
-                                icon: "chart.bar.doc.horizontal.fill",
-                                title: "Grading ROI Calculator",
-                                description: "Calculate if grading is worth the cost",
-                                color: .yellow,
-                                isComingSoon: false
-                            )
+                            NavigationLink {
+                                TradeAnalyzerView()
+                            } label: {
+                                ToolRow(
+                                    icon: "arrow.left.arrow.right.circle.fill",
+                                    title: "Trade Analyzer",
+                                    description: "Compare card values in trades",
+                                    color: .blue
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
 
-                        Button { } label: {
-                            ToolRow(
-                                icon: "brain.head.profile",
-                                title: "Pro Market Agent",
-                                description: "AI-powered market insights and pricing",
-                                color: .cyan
-                            )
+                        // Listings & Sales
+                        ToolSection(title: "Listings & Sales") {
+                            NavigationLink {
+                                ListingGeneratorView()
+                            } label: {
+                                ToolRow(
+                                    icon: "square.and.pencil",
+                                    title: "Listing Generator",
+                                    description: "Auto-generate descriptions for listings",
+                                    color: .indigo
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            NavigationLink {
+                                AdvancedAnalyticsView()
+                            } label: {
+                                ToolRow(
+                                    icon: "chart.line.uptrend.xyaxis",
+                                    title: "Advanced Analytics",
+                                    description: "View detailed portfolio insights and trends",
+                                    color: .purple
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(true)
+
+                        // Business
+                        ToolSection(title: "Business") {
+                            NavigationLink {
+                                ContactsView()
+                            } label: {
+                                ToolRow(
+                                    icon: "person.2.fill",
+                                    title: "Contacts",
+                                    description: "Manage customers and vendor contacts",
+                                    color: .blue
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-
-                    // Sales & Listing Tools
-                    ToolSection(title: "Sales & Listings") {
-                        NavigationLink {
-                            SalesCalculatorView()
-                        } label: {
-                            ToolRow(
-                                icon: "dollarsign.circle.fill",
-                                title: "Sales Calculator",
-                                description: "Calculate fees, shipping, and profit margins",
-                                color: .green,
-                                isComingSoon: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("sales-calculator-button")
-
-                        NavigationLink {
-                            ListingGeneratorView()
-                        } label: {
-                            ToolRow(
-                                icon: "square.and.pencil",
-                                title: "Listing Generator",
-                                description: "Auto-generate descriptions for listings",
-                                color: .indigo,
-                                isComingSoon: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Organization Tools
-                    ToolSection(title: "Organization") {
-                        Button { } label: {
-                            ToolRow(
-                                icon: "storefront.fill",
-                                title: "Vendor Mode",
-                                description: "Manage card shows and events",
-                                color: .orange
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(true)
-
-                        NavigationLink {
-                            ContactsView()
-                        } label: {
-                            ToolRow(
-                                icon: "person.2.fill",
-                                title: "Contacts",
-                                description: "Manage customers and vendor contacts",
-                                color: .blue,
-                                isComingSoon: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-                        Button { } label: {
-                            ToolRow(
-                                icon: "rectangle.stack.fill.badge.person.crop",
-                                title: "Personal Collection",
-                                description: "Track your personal card collection",
-                                color: .purple
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(true)
-                    }
+                    .padding()
                 }
-                .padding()
-            }
             }
             .navigationTitle("Tools")
             .navigationBarTitleDisplayMode(.inline)
@@ -154,17 +113,17 @@ struct ToolSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
             Text(title)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+                .font(DesignSystem.Typography.heading4)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                .padding(.horizontal, DesignSystem.Spacing.xxxs)
 
             VStack(spacing: 0) {
                 content
             }
             .background(DesignSystem.Colors.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
             .shadow(color: .black.opacity(0.05), radius: 5)
         }
     }
@@ -177,37 +136,21 @@ struct ToolRow: View {
     let title: String
     let description: String
     let color: Color
-    var isComingSoon: Bool = true // Default to coming soon until implemented
 
     var body: some View {
-        HStack(spacing: 16) {
-            // Icon
+        HStack(spacing: DesignSystem.Spacing.sm) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(.white)
                 .frame(width: 52, height: 52)
                 .background(color.gradient)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
 
-            // Content
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(title)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-
-                    if isComingSoon {
-                        Text("SOON")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange)
-                            .clipShape(Capsule())
-                    }
-                }
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxxs) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
 
                 Text(description)
                     .font(.caption)
@@ -217,19 +160,16 @@ struct ToolRow: View {
 
             Spacer()
 
-            // Chevron
             Image(systemName: "chevron.right")
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.tertiary)
         }
-        .padding(16)
+        .padding(DesignSystem.Spacing.sm)
         .background(DesignSystem.Colors.cardBackground)
         .contentShape(Rectangle())
-        .opacity(isComingSoon ? 0.6 : 1.0)
-        .allowsHitTesting(!isComingSoon)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(isComingSoon ? "\(title), Coming soon" : title)
+        .accessibilityLabel(title)
         .accessibilityHint(description)
     }
 }

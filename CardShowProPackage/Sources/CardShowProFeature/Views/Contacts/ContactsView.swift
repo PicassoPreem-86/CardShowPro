@@ -1,17 +1,53 @@
+import SwiftData
 import SwiftUI
 
 /// Main contacts list view — a dedicated business rolodex for the card trading space
 struct ContactsView: View {
-    @State private var state = ContactsState()
+    @Query(sort: \Contact.name) private var contacts: [Contact]
+    @Environment(\.modelContext) private var modelContext
+    @State private var searchText: String = ""
+    @State private var selectedTypeFilter: ContactType?
     @State private var showingAddSheet = false
-    @State private var navigationPath = NavigationPath()
+    @State private var selectedContactID: UUID?
+
+    /// Filtered contacts based on search text and type filter
+    private var filteredContacts: [Contact] {
+        var filtered = contacts
+
+        // Apply type filter
+        if let typeFilter = selectedTypeFilter {
+            filtered = filtered.filter { $0.contactTypeEnum == typeFilter }
+        }
+
+        // Apply search
+        if !searchText.isEmpty {
+            let searchLower = searchText.lowercased()
+            filtered = filtered.filter { contact in
+                contact.name.lowercased().contains(searchLower) ||
+                contact.phone?.contains(searchText) == true ||
+                contact.email?.lowercased().contains(searchLower) == true ||
+                contact.socialMedia?.lowercased().contains(searchLower) == true ||
+                contact.collectingInterests?.lowercased().contains(searchLower) == true ||
+                contact.buyingPreferences?.lowercased().contains(searchLower) == true ||
+                contact.specialties?.lowercased().contains(searchLower) == true ||
+                contact.organization?.lowercased().contains(searchLower) == true
+            }
+        }
+
+        return filtered
+    }
+
+    /// Count of contacts for a given type
+    private func count(for type: ContactType) -> Int {
+        contacts.filter { $0.contactTypeEnum == type }.count
+    }
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
+        NavigationStack {
             ZStack(alignment: .bottomTrailing) {
                 // Main Content
                 Group {
-                    if state.contacts.isEmpty && state.searchText.isEmpty {
+                    if contacts.isEmpty && searchText.isEmpty {
                         emptyStateView
                     } else {
                         VStack(spacing: 0) {
@@ -20,7 +56,7 @@ struct ContactsView: View {
                                 .padding(.horizontal, DesignSystem.Spacing.md)
                                 .padding(.vertical, DesignSystem.Spacing.xs)
 
-                            if state.filteredContacts.isEmpty {
+                            if filteredContacts.isEmpty {
                                 noResultsView
                             } else {
                                 contactsList
@@ -33,24 +69,13 @@ struct ContactsView: View {
                 fabButton
             }
             .navigationTitle("Contacts")
-            .searchable(text: $state.searchText, prompt: "Search contacts")
+            .searchable(text: $searchText, prompt: "Search contacts")
             .background(DesignSystem.Colors.backgroundPrimary)
-            .navigationDestination(for: Contact.self) { contact in
-                ContactDetailView(
-                    contact: contact,
-                    onUpdate: { updatedContact in
-                        state.updateContact(updatedContact)
-                    },
-                    onDelete: {
-                        navigationPath.removeLast()
-                        state.deleteContact(contact)
-                    }
-                )
+            .navigationDestination(item: $selectedContactID) { contactID in
+                ContactDetailView(contactID: contactID)
             }
             .sheet(isPresented: $showingAddSheet) {
-                AddEditContactView { newContact in
-                    state.addContact(newContact)
-                }
+                AddEditContactView()
             }
         }
     }
@@ -64,26 +89,26 @@ struct ContactsView: View {
                 // "All" chip
                 FilterChip(
                     label: "All",
-                    count: state.contacts.count,
-                    isSelected: state.selectedTypeFilter == nil,
+                    count: contacts.count,
+                    isSelected: selectedTypeFilter == nil,
                     color: DesignSystem.Colors.textPrimary
                 ) {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        state.selectedTypeFilter = nil
+                        selectedTypeFilter = nil
                     }
                 }
 
                 ForEach(ContactType.allCases) { type in
-                    let count = state.count(for: type)
-                    if count > 0 {
+                    let typeCount = count(for: type)
+                    if typeCount > 0 {
                         FilterChip(
                             label: type.label,
-                            count: count,
-                            isSelected: state.selectedTypeFilter == type,
+                            count: typeCount,
+                            isSelected: selectedTypeFilter == type,
                             color: type.color
                         ) {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                state.selectedTypeFilter = state.selectedTypeFilter == type ? nil : type
+                                selectedTypeFilter = selectedTypeFilter == type ? nil : type
                             }
                         }
                     }
@@ -97,8 +122,10 @@ struct ContactsView: View {
     @ViewBuilder
     private var contactsList: some View {
         List {
-            ForEach(state.filteredContacts) { contact in
-                NavigationLink(value: contact) {
+            ForEach(filteredContacts) { contact in
+                Button {
+                    selectedContactID = contact.id
+                } label: {
                     ContactRowView(contact: contact)
                 }
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -106,7 +133,7 @@ struct ContactsView: View {
                 .listRowSeparator(.hidden)
             }
             .onDelete { indexSet in
-                state.deleteContacts(at: indexSet)
+                deleteContacts(at: indexSet)
             }
         }
         .listStyle(.plain)
@@ -129,12 +156,12 @@ struct ContactsView: View {
                     .font(DesignSystem.Typography.heading3)
                     .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-                if state.selectedTypeFilter != nil && !state.searchText.isEmpty {
+                if selectedTypeFilter != nil && !searchText.isEmpty {
                     Text("Try a different search or filter")
                         .font(DesignSystem.Typography.body)
                         .foregroundStyle(DesignSystem.Colors.textSecondary)
-                } else if state.selectedTypeFilter != nil {
-                    Text("No \(state.selectedTypeFilter!.label.lowercased()) contacts yet")
+                } else if let filter = selectedTypeFilter {
+                    Text("No \(filter.label.lowercased()) contacts yet")
                         .font(DesignSystem.Typography.body)
                         .foregroundStyle(DesignSystem.Colors.textSecondary)
                 } else {
@@ -196,7 +223,7 @@ struct ContactsView: View {
 
     @ViewBuilder
     private var fabButton: some View {
-        if !state.contacts.isEmpty {
+        if !contacts.isEmpty {
             Button {
                 showingAddSheet = true
             } label: {
@@ -215,6 +242,22 @@ struct ContactsView: View {
                     )
             }
             .padding(DesignSystem.Spacing.lg)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func deleteContacts(at offsets: IndexSet) {
+        let contactsToDelete = offsets.map { filteredContacts[$0] }
+        for contact in contactsToDelete {
+            modelContext.delete(contact)
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("Failed to save after deleting contacts: \(error)")
+            #endif
         }
     }
 }
@@ -268,50 +311,7 @@ private struct FilterChip: View {
 
 // MARK: - Previews
 
-#Preview("With Contacts") {
+#Preview("Contacts") {
     ContactsView()
-}
-
-#Preview("Empty State") {
-    let _ = ContactsState(contacts: [])
-    NavigationStack {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: "person.3")
-                .font(.system(size: 60))
-                .foregroundStyle(DesignSystem.Colors.textTertiary)
-
-            VStack(spacing: DesignSystem.Spacing.xs) {
-                Text("Your Business Rolodex")
-                    .font(DesignSystem.Typography.heading3)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-                Text("Keep track of customers, vendors, and event directors you meet in the card business.")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button {
-            } label: {
-                HStack {
-                    Image(systemName: "plus")
-                    Text("Add Contact")
-                }
-                .font(DesignSystem.Typography.labelLarge)
-                .foregroundStyle(DesignSystem.Colors.backgroundPrimary)
-                .padding(.horizontal, DesignSystem.Spacing.lg)
-                .padding(.vertical, DesignSystem.Spacing.sm)
-                .background(DesignSystem.Colors.thunderYellow)
-                .clipShape(Capsule())
-            }
-            .padding(.top, DesignSystem.Spacing.sm)
-
-            Spacer()
-        }
-        .padding(DesignSystem.Spacing.xl)
-        .navigationTitle("Contacts")
-        .background(DesignSystem.Colors.backgroundPrimary)
-    }
+        .modelContainer(for: Contact.self, inMemory: true)
 }

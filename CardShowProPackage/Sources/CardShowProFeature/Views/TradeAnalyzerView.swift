@@ -76,12 +76,42 @@ struct TradeAnalyzerView: View {
                     }
                 }
             }
+            // "Your Cards" source picker - choose inventory or manual
+            .confirmationDialog(
+                "Add Your Card",
+                isPresented: $viewModel.showingYourCardSourcePicker,
+                titleVisibility: .visible
+            ) {
+                Button {
+                    viewModel.showingInventoryPicker = true
+                } label: {
+                    Label("From Inventory", systemImage: "shippingbox.fill")
+                }
+
+                Button {
+                    viewModel.showingAddYourCard = true
+                } label: {
+                    Label("Manual Entry", systemImage: "pencil.line")
+                }
+
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Choose how to add a card")
+            }
+            // Inventory picker sheet
+            .sheet(isPresented: $viewModel.showingInventoryPicker) {
+                InventoryPickerView { inventoryCard in
+                    withAnimation(DesignSystem.Animation.springSmooth) {
+                        viewModel.addCardFromInventory(inventoryCard)
+                    }
+                }
+            }
+            // Manual entry for "Your Cards"
             .sheet(isPresented: $viewModel.showingAddYourCard) {
-                // Show manual entry directly - inventory picker coming soon
                 ManualCardEntrySheet(viewModel: viewModel)
             }
+            // Manual entry for "Their Cards"
             .sheet(isPresented: $viewModel.showingAddTheirCard) {
-                // Show manual entry directly - inventory picker coming soon
                 ManualCardEntrySheet(viewModel: viewModel)
             }
         }

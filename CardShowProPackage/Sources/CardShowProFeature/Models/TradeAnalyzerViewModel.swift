@@ -8,6 +8,8 @@ final class TradeAnalyzerViewModel {
     var theirCards: [TradeCard] = []
     var showingAddYourCard = false
     var showingAddTheirCard = false
+    var showingInventoryPicker = false
+    var showingYourCardSourcePicker = false
     var manualCardName = ""
     var manualSetName = ""
     var manualValue = ""
@@ -22,7 +24,7 @@ final class TradeAnalyzerViewModel {
     func addCard(to side: TradeSide) {
         isAddingToYourSide = (side == .yours)
         if side == .yours {
-            showingAddYourCard = true
+            showingYourCardSourcePicker = true
         } else {
             showingAddTheirCard = true
         }
@@ -50,7 +52,7 @@ final class TradeAnalyzerViewModel {
             setName: manualSetName.isEmpty ? nil : manualSetName,
             estimatedValue: value,
             imageURL: nil,
-            isFromInventory: isAddingToYourSide
+            isFromInventory: false
         )
 
         if isAddingToYourSide {
@@ -60,6 +62,21 @@ final class TradeAnalyzerViewModel {
         }
 
         resetManualEntry()
+    }
+
+    /// Add a card from the user's inventory
+    func addCardFromInventory(_ inventoryCard: InventoryCard) {
+        let card = TradeCard(
+            name: inventoryCard.cardName,
+            setName: inventoryCard.setName,
+            estimatedValue: Decimal(inventoryCard.estimatedValue),
+            imageURL: nil,
+            isFromInventory: true,
+            condition: inventoryCard.condition,
+            imageData: inventoryCard.imageData
+        )
+
+        yourCards.append(card)
     }
 
     /// Reset manual entry form fields

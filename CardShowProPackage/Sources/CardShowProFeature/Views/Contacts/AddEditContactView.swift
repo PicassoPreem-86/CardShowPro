@@ -1,10 +1,13 @@
+import SwiftData
 import SwiftUI
 
 /// Form sheet for adding or editing a contact
 struct AddEditContactView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    /// When editing, this is the existing Contact to update. Nil for new contacts.
     let contact: Contact?
-    let onSave: (Contact) -> Void
 
     @State private var name: String = ""
     @State private var contactType: ContactType = .customer
@@ -37,20 +40,19 @@ struct AddEditContactView: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    init(contact: Contact? = nil, onSave: @escaping (Contact) -> Void) {
+    init(contact: Contact? = nil) {
         self.contact = contact
-        self.onSave = onSave
 
-        if let contact = contact {
+        if let contact {
             _name = State(initialValue: contact.name)
-            _contactType = State(initialValue: contact.contactType)
+            _contactType = State(initialValue: contact.contactTypeEnum)
             _phone = State(initialValue: contact.phone ?? "")
             _email = State(initialValue: contact.email ?? "")
             _socialMedia = State(initialValue: contact.socialMedia ?? "")
             _notes = State(initialValue: contact.notes ?? "")
             _collectingInterests = State(initialValue: contact.collectingInterests ?? "")
-            _spendingTier = State(initialValue: contact.spendingTier ?? .casual)
-            _preferredContactMethod = State(initialValue: contact.preferredContactMethod ?? .noPreference)
+            _spendingTier = State(initialValue: contact.spendingTierEnum ?? .casual)
+            _preferredContactMethod = State(initialValue: contact.preferredContactMethodEnum ?? .noPreference)
             _buyingPreferences = State(initialValue: contact.buyingPreferences ?? "")
             _specialties = State(initialValue: contact.specialties ?? "")
             _organization = State(initialValue: contact.organization ?? "")
@@ -245,27 +247,51 @@ struct AddEditContactView: View {
         let trimmedEventName = eventName.trimmingCharacters(in: .whitespaces)
         let trimmedVenue = venue.trimmingCharacters(in: .whitespaces)
 
-        let newContact = Contact(
-            id: contact?.id ?? UUID(),
-            name: trimmedName,
-            contactType: contactType,
-            phone: trimmedPhone.isEmpty ? nil : trimmedPhone,
-            email: trimmedEmail.isEmpty ? nil : trimmedEmail,
-            socialMedia: trimmedSocial.isEmpty ? nil : trimmedSocial,
-            notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
-            createdAt: contact?.createdAt ?? Date(),
-            lastContactedAt: contact?.lastContactedAt,
-            collectingInterests: contactType == .customer && !trimmedInterests.isEmpty ? trimmedInterests : nil,
-            spendingTier: contactType == .customer ? spendingTier : nil,
-            preferredContactMethod: contactType == .customer ? preferredContactMethod : nil,
-            buyingPreferences: contactType == .buyer && !trimmedBuying.isEmpty ? trimmedBuying : nil,
-            specialties: contactType == .vendor && !trimmedSpecialties.isEmpty ? trimmedSpecialties : nil,
-            organization: contactType == .eventDirector && !trimmedOrganization.isEmpty ? trimmedOrganization : nil,
-            eventName: contactType == .eventDirector && !trimmedEventName.isEmpty ? trimmedEventName : nil,
-            venue: contactType == .eventDirector && !trimmedVenue.isEmpty ? trimmedVenue : nil
-        )
+        if let contact {
+            // Update existing contact in-place (SwiftData tracks changes)
+            contact.name = trimmedName
+            contact.contactTypeEnum = contactType
+            contact.phone = trimmedPhone.isEmpty ? nil : trimmedPhone
+            contact.email = trimmedEmail.isEmpty ? nil : trimmedEmail
+            contact.socialMedia = trimmedSocial.isEmpty ? nil : trimmedSocial
+            contact.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+            contact.collectingInterests = contactType == .customer && !trimmedInterests.isEmpty ? trimmedInterests : nil
+            contact.spendingTierEnum = contactType == .customer ? spendingTier : nil
+            contact.preferredContactMethodEnum = contactType == .customer ? preferredContactMethod : nil
+            contact.buyingPreferences = contactType == .buyer && !trimmedBuying.isEmpty ? trimmedBuying : nil
+            contact.specialties = contactType == .vendor && !trimmedSpecialties.isEmpty ? trimmedSpecialties : nil
+            contact.organization = contactType == .eventDirector && !trimmedOrganization.isEmpty ? trimmedOrganization : nil
+            contact.eventName = contactType == .eventDirector && !trimmedEventName.isEmpty ? trimmedEventName : nil
+            contact.venue = contactType == .eventDirector && !trimmedVenue.isEmpty ? trimmedVenue : nil
+        } else {
+            // Create new contact and insert into SwiftData
+            let newContact = Contact(
+                name: trimmedName,
+                contactType: contactType,
+                phone: trimmedPhone.isEmpty ? nil : trimmedPhone,
+                email: trimmedEmail.isEmpty ? nil : trimmedEmail,
+                socialMedia: trimmedSocial.isEmpty ? nil : trimmedSocial,
+                notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
+                collectingInterests: contactType == .customer && !trimmedInterests.isEmpty ? trimmedInterests : nil,
+                spendingTier: contactType == .customer ? spendingTier : nil,
+                preferredContactMethod: contactType == .customer ? preferredContactMethod : nil,
+                buyingPreferences: contactType == .buyer && !trimmedBuying.isEmpty ? trimmedBuying : nil,
+                specialties: contactType == .vendor && !trimmedSpecialties.isEmpty ? trimmedSpecialties : nil,
+                organization: contactType == .eventDirector && !trimmedOrganization.isEmpty ? trimmedOrganization : nil,
+                eventName: contactType == .eventDirector && !trimmedEventName.isEmpty ? trimmedEventName : nil,
+                venue: contactType == .eventDirector && !trimmedVenue.isEmpty ? trimmedVenue : nil
+            )
+            modelContext.insert(newContact)
+        }
 
-        onSave(newContact)
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("Failed to save contact: \(error)")
+            #endif
+        }
+
         dismiss()
     }
 }
@@ -273,19 +299,20 @@ struct AddEditContactView: View {
 // MARK: - Previews
 
 #Preview("Add Contact") {
-    AddEditContactView { contact in
-        let _ = contact
-    }
+    AddEditContactView()
+        .modelContainer(for: Contact.self, inMemory: true)
 }
 
-#Preview("Edit Customer") {
-    AddEditContactView(contact: Contact.mockContacts[0]) { contact in
-        let _ = contact
-    }
-}
-
-#Preview("Edit Vendor") {
-    AddEditContactView(contact: Contact.mockContacts[2]) { contact in
-        let _ = contact
-    }
+#Preview("Edit Contact") {
+    AddEditContactView(
+        contact: Contact(
+            name: "John Smith",
+            contactType: .customer,
+            phone: "555-0123",
+            collectingInterests: "Vintage Pokemon",
+            spendingTier: .regular,
+            preferredContactMethod: .text
+        )
+    )
+    .modelContainer(for: Contact.self, inMemory: true)
 }
