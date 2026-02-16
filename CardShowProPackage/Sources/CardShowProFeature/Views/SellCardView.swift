@@ -11,6 +11,7 @@ struct SellCardView: View {
     @State private var buyerName: String = ""
     @State private var eventName: String = ""
     @State private var selectedPlatform: SellPlatform = .ebay
+    @State private var showSaveError = false
     @FocusState private var focusedField: Field?
 
     enum Field: Hashable {
@@ -158,6 +159,12 @@ struct SellCardView: View {
                 if selectedPlatform == .localCash || selectedPlatform == .event {
                     shippingCost = "0"
                 }
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("Try Again") { confirmSale() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("The sale could not be saved. Please try again.")
             }
         }
     }
@@ -471,13 +478,13 @@ struct SellCardView: View {
 
         do {
             try modelContext.save()
+            HapticManager.shared.success()
+            dismiss()
         } catch {
             #if DEBUG
             print("Failed to save sale: \(error)")
             #endif
+            showSaveError = true
         }
-
-        HapticManager.shared.success()
-        dismiss()
     }
 }

@@ -11,6 +11,7 @@ struct CardDetailView: View {
     @State private var showZoomView = false
     @State private var showSellSheet = false
     @State private var showListedSheet = false
+    @State private var showSaveError = false
 
     private var purchasePrice: Double {
         card.purchaseCost ?? 0
@@ -89,6 +90,11 @@ struct CardDetailView: View {
             if let image = card.image {
                 ZoomableImageView(image: image)
             }
+        }
+        .alert("Save Failed", isPresented: $showSaveError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("The change could not be saved. Please try again.")
         }
     }
 
@@ -713,12 +719,13 @@ struct CardDetailView: View {
 
         do {
             try modelContext.save()
+            HapticManager.shared.light()
         } catch {
             #if DEBUG
             print("Failed to save return to stock: \(error)")
             #endif
+            showSaveError = true
         }
-        HapticManager.shared.light()
     }
 
     private func markAsShipped() {
@@ -726,24 +733,26 @@ struct CardDetailView: View {
 
         do {
             try modelContext.save()
+            HapticManager.shared.success()
         } catch {
             #if DEBUG
             print("Failed to save shipped status: \(error)")
             #endif
+            showSaveError = true
         }
-        HapticManager.shared.success()
     }
 
     private func deleteCard() {
         modelContext.delete(card)
         do {
             try modelContext.save()
+            dismiss()
         } catch {
             #if DEBUG
             print("Failed to save after delete: \(error)")
             #endif
+            showSaveError = true
         }
-        dismiss()
     }
 
     // MARK: - Confidence Helpers

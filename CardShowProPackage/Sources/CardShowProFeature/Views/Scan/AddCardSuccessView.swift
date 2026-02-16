@@ -203,7 +203,7 @@ struct AddCardSuccessView: View {
     @Previewable @State var appState = AppState()
 
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: InventoryCard.self, configurations: config)
+    let container = (try? ModelContainer(for: InventoryCard.self, configurations: config))!
 
     // Create sample cards
     let card1 = InventoryCard(

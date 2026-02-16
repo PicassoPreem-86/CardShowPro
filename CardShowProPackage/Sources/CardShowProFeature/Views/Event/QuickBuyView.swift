@@ -19,6 +19,7 @@ struct QuickBuyView: View {
     @State private var selectedCategory = "Raw Singles"
     @State private var selectedCondition = "Near Mint"
     @State private var showSuccess = false
+    @State private var showSaveError = false
     @FocusState private var focusedField: Field?
 
     private let categories = ["Raw Singles", "Graded", "Sealed Product", "Supplies", "Other"]
@@ -73,6 +74,11 @@ struct QuickBuyView: View {
                 if showSuccess {
                     successOverlay
                 }
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("The data could not be saved. Please try again.")
             }
         }
     }
@@ -311,23 +317,23 @@ struct QuickBuyView: View {
 
         do {
             try modelContext.save()
+            // Haptic feedback
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+            // Show success then dismiss
+            withAnimation(.easeInOut(duration: DesignSystem.Animation.fast)) {
+                showSuccess = true
+            }
+
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.2))
+                dismiss()
+            }
         } catch {
             #if DEBUG
             print("QuickBuyView save failed: \(error)")
             #endif
-        }
-
-        // Haptic feedback
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-
-        // Show success then dismiss
-        withAnimation(.easeInOut(duration: DesignSystem.Animation.fast)) {
-            showSuccess = true
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.2))
-            dismiss()
+            showSaveError = true
         }
     }
 }

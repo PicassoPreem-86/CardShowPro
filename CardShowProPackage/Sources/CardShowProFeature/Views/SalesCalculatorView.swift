@@ -76,11 +76,10 @@ struct SalesCalculatorView: View {
                 ToastView(message: "List price copied!")
                     .padding(.top, DesignSystem.Spacing.md)
                     .transition(.move(edge: .top).combined(with: .opacity))
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation {
-                                showCopyToast = false
-                            }
+                    .task {
+                        try? await Task.sleep(for: .seconds(2))
+                        withAnimation {
+                            showCopyToast = false
                         }
                     }
             }

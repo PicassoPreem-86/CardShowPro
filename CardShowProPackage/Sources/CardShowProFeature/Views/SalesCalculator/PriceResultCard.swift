@@ -26,7 +26,8 @@ struct PriceResultCard: View {
                     withAnimation {
                         showCopyToast = true
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    Task {
+                        try? await Task.sleep(for: .seconds(2))
                         withAnimation {
                             showCopyToast = false
                         }

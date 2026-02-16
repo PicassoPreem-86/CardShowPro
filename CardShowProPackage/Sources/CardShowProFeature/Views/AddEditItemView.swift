@@ -34,6 +34,7 @@ struct AddEditItemView: View {
 
     // Validation
     @State private var showValidationErrors = false
+    @State private var showSaveError = false
 
     private var isEditMode: Bool {
         cardToEdit != nil
@@ -281,6 +282,12 @@ struct AddEditItemView: View {
             .onAppear {
                 loadCardData()
             }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("Try Again") { saveCard() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("The card could not be saved. Please try again.")
+            }
         }
     }
 
@@ -398,6 +405,7 @@ struct AddEditItemView: View {
             #if DEBUG
             print("Error saving card: \(error)")
             #endif
+            showSaveError = true
         }
     }
 }

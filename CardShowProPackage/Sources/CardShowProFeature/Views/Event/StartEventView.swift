@@ -18,6 +18,7 @@ struct StartEventView: View {
     @State private var tableCostText = ""
     @State private var travelCostText = ""
     @State private var notes = ""
+    @State private var showSaveError = false
     @FocusState private var focusedField: Field?
 
     enum Field: Hashable {
@@ -71,6 +72,11 @@ struct StartEventView: View {
                     }
                     .foregroundStyle(DesignSystem.Colors.textSecondary)
                 }
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("The data could not be saved. Please try again.")
             }
         }
     }
@@ -266,16 +272,15 @@ struct StartEventView: View {
 
         do {
             try modelContext.save()
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            onEventStarted?(event)
+            dismiss()
         } catch {
             #if DEBUG
             print("StartEventView save failed: \(error)")
             #endif
+            showSaveError = true
         }
-
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-
-        onEventStarted?(event)
-        dismiss()
     }
 }
 

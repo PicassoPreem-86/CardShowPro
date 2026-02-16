@@ -187,7 +187,8 @@ public struct PriceHistoryChart: View {
                             }
                             .onEnded { _ in
                                 // Keep selection for a moment then clear
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                Task {
+                                    try? await Task.sleep(for: .seconds(2))
                                     withAnimation {
                                         selectedPoint = nil
                                     }

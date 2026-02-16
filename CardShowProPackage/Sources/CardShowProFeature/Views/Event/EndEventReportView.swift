@@ -14,6 +14,7 @@ struct EndEventReportView: View {
     @Query private var allTransactions: [Transaction]
 
     @State private var showConfirmClose = false
+    @State private var showSaveError = false
 
     // MARK: - Filtered Transactions
 
@@ -113,6 +114,11 @@ struct EndEventReportView: View {
                 }
             } message: {
                 Text("This will mark \"\(event.name)\" as complete. You can still view the report from Event History.")
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("The data could not be saved. Please try again.")
             }
         }
     }
@@ -334,15 +340,14 @@ struct EndEventReportView: View {
 
         do {
             try modelContext.save()
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            dismiss()
         } catch {
             #if DEBUG
             print("EndEventReportView save failed: \(error)")
             #endif
+            showSaveError = true
         }
-
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-
-        dismiss()
     }
 }
 

@@ -108,5 +108,5 @@ struct ZoomableImageView: View {
 
 // MARK: - Preview
 #Preview {
-    ZoomableImageView(image: UIImage(systemName: "photo")!)
+    ZoomableImageView(image: UIImage(systemName: "photo") ?? UIImage())
 }

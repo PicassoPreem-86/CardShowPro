@@ -8,6 +8,7 @@ struct MarkAsListedView: View {
 
     @State private var listingPrice: String = ""
     @State private var selectedPlatform: ListingPlatform = .ebay
+    @State private var showSaveError = false
     @FocusState private var priceFieldFocused: Bool
 
     enum ListingPlatform: String, CaseIterable, Identifiable {
@@ -65,6 +66,12 @@ struct MarkAsListedView: View {
             }
             .onAppear {
                 listingPrice = String(format: "%.2f", card.marketValue)
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("Try Again") { confirmListing() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("The listing could not be saved. Please try again.")
             }
         }
     }
@@ -223,13 +230,13 @@ struct MarkAsListedView: View {
 
         do {
             try modelContext.save()
+            HapticManager.shared.success()
+            dismiss()
         } catch {
             #if DEBUG
             print("Failed to save listing: \(error)")
             #endif
+            showSaveError = true
         }
-
-        HapticManager.shared.success()
-        dismiss()
     }
 }

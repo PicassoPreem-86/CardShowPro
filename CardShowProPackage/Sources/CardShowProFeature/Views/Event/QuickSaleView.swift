@@ -27,6 +27,7 @@ struct QuickSaleView: View {
     @State private var selectedPaymentMethod = "Cash"
     @State private var searchText = ""
     @State private var showSuccess = false
+    @State private var showSaveError = false
     @FocusState private var focusedField: Field?
 
     private let paymentMethods = ["Cash", "Venmo", "Card", "Zelle", "Other"]
@@ -94,6 +95,11 @@ struct QuickSaleView: View {
                 if showSuccess {
                     successOverlay
                 }
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("The data could not be saved. Please try again.")
             }
         }
     }
@@ -388,23 +394,23 @@ struct QuickSaleView: View {
 
         do {
             try modelContext.save()
+            // Haptic feedback
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+            // Show success then dismiss
+            withAnimation(.easeInOut(duration: DesignSystem.Animation.fast)) {
+                showSuccess = true
+            }
+
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.2))
+                dismiss()
+            }
         } catch {
             #if DEBUG
             print("QuickSaleView save failed: \(error)")
             #endif
-        }
-
-        // Haptic feedback
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-
-        // Show success then dismiss
-        withAnimation(.easeInOut(duration: DesignSystem.Animation.fast)) {
-            showSuccess = true
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.2))
-            dismiss()
+            showSaveError = true
         }
     }
 }

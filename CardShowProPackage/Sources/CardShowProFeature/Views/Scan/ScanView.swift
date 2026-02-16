@@ -180,22 +180,16 @@ struct ScanView: View {
             startCamera()
             // Configure cache for faster repeat scans
             scannedCardsManager.configure(modelContext: modelContext)
-
+        }
+        .task {
             // Configure camera for initial zoom after short delay (camera needs to initialize)
-            Task {
-                try? await Task.sleep(for: .milliseconds(500))
-                cameraManager.setZoom(selectedZoom)
-            }
-
+            try? await Task.sleep(for: .milliseconds(500))
+            cameraManager.setZoom(selectedZoom)
+        }
+        .task {
             // Initialize local database for fast search
-            Task {
-                if await !localDB.isReady {
-                    do {
-                        try await localDB.initialize()
-                    } catch {
-                        // Local database init failed - will use remote API as fallback
-                    }
-                }
+            if await !localDB.isReady {
+                try? await localDB.initialize()
             }
         }
         .onDisappear {
