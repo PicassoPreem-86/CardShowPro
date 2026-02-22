@@ -32,6 +32,13 @@ struct AddEditContactView: View {
     @State private var eventName: String = ""
     @State private var venue: String = ""
 
+    // CRM fields
+    @State private var tags: String = ""
+    @State private var rating: Int = 0
+    @State private var hasFollowUp: Bool = false
+    @State private var followUpDate: Date = Date().addingTimeInterval(86400 * 7)
+    @State private var followUpNote: String = ""
+
     private var isEditing: Bool {
         contact != nil
     }
@@ -58,6 +65,11 @@ struct AddEditContactView: View {
             _organization = State(initialValue: contact.organization ?? "")
             _eventName = State(initialValue: contact.eventName ?? "")
             _venue = State(initialValue: contact.venue ?? "")
+            _tags = State(initialValue: contact.tags ?? "")
+            _rating = State(initialValue: contact.rating ?? 0)
+            _hasFollowUp = State(initialValue: contact.followUpDate != nil)
+            _followUpDate = State(initialValue: contact.followUpDate ?? Date().addingTimeInterval(86400 * 7))
+            _followUpNote = State(initialValue: contact.followUpNote ?? "")
         }
     }
 
@@ -101,6 +113,62 @@ struct AddEditContactView: View {
 
                 // Type-specific fields
                 typeSpecificSection
+
+                // CRM: Tags
+                Section {
+                    TextField("e.g. pokemon, vintage, local", text: $tags)
+                        .textInputAutocapitalization(.never)
+                } header: {
+                    Text("Tags")
+                } footer: {
+                    Text("Comma-separated tags for filtering and organizing contacts")
+                }
+
+                // CRM: Rating
+                Section {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
+                        ForEach(1...5, id: \.self) { star in
+                            Button {
+                                rating = rating == star ? 0 : star
+                            } label: {
+                                Image(systemName: star <= rating ? "star.fill" : "star")
+                                    .font(.title2)
+                                    .foregroundStyle(star <= rating ? DesignSystem.Colors.thunderYellow : DesignSystem.Colors.textDisabled)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Spacer()
+
+                        if rating > 0 {
+                            Button("Clear") {
+                                rating = 0
+                            }
+                            .font(DesignSystem.Typography.caption)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+                        }
+                    }
+                } header: {
+                    Text("Rating")
+                } footer: {
+                    Text("Rate this contact based on your business relationship")
+                }
+
+                // CRM: Follow-Up
+                Section {
+                    Toggle("Set Follow-Up Reminder", isOn: $hasFollowUp)
+
+                    if hasFollowUp {
+                        DatePicker("Date", selection: $followUpDate, displayedComponents: .date)
+
+                        TextField("Reminder note", text: $followUpNote, axis: .vertical)
+                            .lineLimit(2...4)
+                    }
+                } header: {
+                    Text("Follow-Up")
+                } footer: {
+                    Text(hasFollowUp ? "You'll see a reminder on the dashboard when this date passes" : "Set a reminder to follow up with this contact")
+                }
 
                 // Notes
                 Section {
@@ -247,6 +315,9 @@ struct AddEditContactView: View {
         let trimmedEventName = eventName.trimmingCharacters(in: .whitespaces)
         let trimmedVenue = venue.trimmingCharacters(in: .whitespaces)
 
+        let trimmedTags = tags.trimmingCharacters(in: .whitespaces)
+        let trimmedFollowUpNote = followUpNote.trimmingCharacters(in: .whitespaces)
+
         if let contact {
             // Update existing contact in-place (SwiftData tracks changes)
             contact.name = trimmedName
@@ -263,6 +334,10 @@ struct AddEditContactView: View {
             contact.organization = contactType == .eventDirector && !trimmedOrganization.isEmpty ? trimmedOrganization : nil
             contact.eventName = contactType == .eventDirector && !trimmedEventName.isEmpty ? trimmedEventName : nil
             contact.venue = contactType == .eventDirector && !trimmedVenue.isEmpty ? trimmedVenue : nil
+            contact.tags = trimmedTags.isEmpty ? nil : trimmedTags
+            contact.rating = rating > 0 ? rating : nil
+            contact.followUpDate = hasFollowUp ? followUpDate : nil
+            contact.followUpNote = hasFollowUp && !trimmedFollowUpNote.isEmpty ? trimmedFollowUpNote : nil
         } else {
             // Create new contact and insert into SwiftData
             let newContact = Contact(
@@ -279,7 +354,11 @@ struct AddEditContactView: View {
                 specialties: contactType == .vendor && !trimmedSpecialties.isEmpty ? trimmedSpecialties : nil,
                 organization: contactType == .eventDirector && !trimmedOrganization.isEmpty ? trimmedOrganization : nil,
                 eventName: contactType == .eventDirector && !trimmedEventName.isEmpty ? trimmedEventName : nil,
-                venue: contactType == .eventDirector && !trimmedVenue.isEmpty ? trimmedVenue : nil
+                venue: contactType == .eventDirector && !trimmedVenue.isEmpty ? trimmedVenue : nil,
+                tags: trimmedTags.isEmpty ? nil : trimmedTags,
+                followUpDate: hasFollowUp ? followUpDate : nil,
+                followUpNote: hasFollowUp && !trimmedFollowUpNote.isEmpty ? trimmedFollowUpNote : nil,
+                rating: rating > 0 ? rating : nil
             )
             modelContext.insert(newContact)
         }

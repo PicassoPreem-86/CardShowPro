@@ -68,10 +68,16 @@ struct InventoryCardGridItem: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.9)
 
-                Text(card.setName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(card.setName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    if let variant = card.variantType, variant != .normal {
+                        VariantBadge(variant: variant)
+                    }
+                }
 
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {

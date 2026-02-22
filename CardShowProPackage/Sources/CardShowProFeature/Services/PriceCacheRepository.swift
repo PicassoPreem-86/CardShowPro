@@ -78,28 +78,178 @@ final class CachedPrice: Sendable {
     }
 }
 
-/// Repository for caching card prices using in-memory storage
+/// Repository for caching card prices using in-memory + SwiftData persistence
 @MainActor
 final class PriceCacheRepository {
     private var cache: [String: CachedPrice] = [:]
+    private var accessOrder: [String] = []
+    private let maxCacheSize = 5000
     private let modelContext: ModelContext?
 
     init(modelContext: ModelContext? = nil) {
         self.modelContext = modelContext
     }
 
-    /// Get cached price for a card
+    /// Pre-load SwiftData entries into in-memory cache on startup
+    func preloadFromPersistence() {
+        guard let modelContext else { return }
+        do {
+            let descriptor = FetchDescriptor<PriceCacheEntry>(
+                sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
+            )
+            let entries = try modelContext.fetch(descriptor)
+            for entry in entries.prefix(maxCacheSize) {
+                let cached = CachedPrice(
+                    cardID: entry.cardId,
+                    cardName: entry.cardName,
+                    setName: entry.setName ?? "",
+                    setID: "",
+                    cardNumber: "",
+                    marketPrice: entry.marketPrice,
+                    lowPrice: entry.lowPrice,
+                    midPrice: entry.midPrice,
+                    highPrice: entry.highPrice
+                )
+                cached.tcgplayerId = entry.tcgPlayerId
+                cache[entry.cardId] = cached
+                accessOrder.append(entry.cardId)
+            }
+        } catch {
+            #if DEBUG
+            print("PriceCacheRepository: Failed to preload from SwiftData: \(error)")
+            #endif
+        }
+    }
+
+    /// Get cached price for a card (checks in-memory first, then SwiftData)
     func getPrice(cardID: String) throws -> CachedPrice? {
-        cache[cardID]
+        // Check in-memory cache first
+        if let cached = cache[cardID] {
+            trackAccess(cardID)
+            return cached
+        }
+
+        // Fall back to SwiftData
+        guard let modelContext else { return nil }
+        let searchID = cardID
+        var descriptor = FetchDescriptor<PriceCacheEntry>(
+            predicate: #Predicate<PriceCacheEntry> { entry in
+                entry.cardId == searchID
+            }
+        )
+        descriptor.fetchLimit = 1
+        guard let entry = try modelContext.fetch(descriptor).first else { return nil }
+
+        // Hydrate into in-memory cache
+        let cached = CachedPrice(
+            cardID: entry.cardId,
+            cardName: entry.cardName,
+            setName: entry.setName ?? "",
+            setID: "",
+            cardNumber: "",
+            marketPrice: entry.marketPrice,
+            lowPrice: entry.lowPrice,
+            midPrice: entry.midPrice,
+            highPrice: entry.highPrice
+        )
+        cached.tcgplayerId = entry.tcgPlayerId
+        cache[cardID] = cached
+        trackAccess(cardID)
+        return cached
     }
 
-    /// Save price to cache
+    /// Save price to both in-memory cache and SwiftData
     func savePrice(_ price: CachedPrice) throws {
+        // Write to in-memory cache
         cache[price.cardID] = price
+        trackAccess(price.cardID)
+        evictIfNeeded()
+
+        // Write to SwiftData
+        guard let modelContext else { return }
+        let searchID = price.cardID
+        var descriptor = FetchDescriptor<PriceCacheEntry>(
+            predicate: #Predicate<PriceCacheEntry> { entry in
+                entry.cardId == searchID
+            }
+        )
+        descriptor.fetchLimit = 1
+
+        let entry: PriceCacheEntry
+        if let existing = try modelContext.fetch(descriptor).first {
+            entry = existing
+        } else {
+            entry = PriceCacheEntry(cardId: price.cardID, cardName: price.cardName)
+            modelContext.insert(entry)
+        }
+
+        entry.cardName = price.cardName
+        entry.setName = price.setName
+        entry.lowPrice = price.lowPrice
+        entry.midPrice = price.midPrice
+        entry.highPrice = price.highPrice
+        entry.marketPrice = price.marketPrice
+        entry.tcgPlayerId = price.tcgplayerId
+        entry.lastUpdated = Date()
+        entry.source = "tcgplayer"
+
+        do {
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("PriceCacheRepository: Failed to persist to SwiftData: \(error)")
+            #endif
+        }
     }
 
-    /// Clear all cached prices
-    func clearAll() {
+    /// Clear all cached prices (both in-memory and SwiftData)
+    func clearCache() {
         cache.removeAll()
+        accessOrder.removeAll()
+
+        guard let modelContext else { return }
+        do {
+            try modelContext.delete(model: PriceCacheEntry.self)
+            try modelContext.save()
+        } catch {
+            #if DEBUG
+            print("PriceCacheRepository: Failed to clear SwiftData cache: \(error)")
+            #endif
+        }
+    }
+
+    /// Legacy alias for backward compatibility
+    func clearAll() {
+        clearCache()
+    }
+
+    /// Number of entries in the in-memory cache
+    var cacheEntryCount: Int {
+        cache.count
+    }
+
+    /// Total number of entries persisted in SwiftData
+    func persistedEntryCount() -> Int {
+        guard let modelContext else { return 0 }
+        do {
+            let descriptor = FetchDescriptor<PriceCacheEntry>()
+            return try modelContext.fetchCount(descriptor)
+        } catch {
+            return 0
+        }
+    }
+
+    // MARK: - LRU Eviction
+
+    private func trackAccess(_ cardID: String) {
+        accessOrder.removeAll { $0 == cardID }
+        accessOrder.append(cardID)
+    }
+
+    private func evictIfNeeded() {
+        while cache.count > maxCacheSize, let oldest = accessOrder.first {
+            cache.removeValue(forKey: oldest)
+            accessOrder.removeFirst()
+        }
     }
 }

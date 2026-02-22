@@ -181,4 +181,85 @@ enum ListingGeneratorService {
 
         return lines.joined(separator: "\n")
     }
+
+    // MARK: - Template-Based Generation
+
+    /// Generate a listing using a custom ListingTemplate
+    static func generateFromTemplate(
+        _ template: ListingTemplate,
+        card: InventoryCard
+    ) -> String {
+        template.generateListing(for: card)
+    }
+
+    // MARK: - Pricing Suggestions
+
+    /// Generate pricing suggestions based on market value and platform
+    static func pricingSuggestions(
+        for card: InventoryCard,
+        platform: ListingPlatform
+    ) -> [(label: String, price: Double)] {
+        let market = card.estimatedValue
+        guard market > 0 else { return [] }
+
+        let feeRate: Double
+        switch platform {
+        case .ebay: feeRate = 0.1312
+        case .tcgplayer: feeRate = 0.1089
+        case .mercari: feeRate = 0.10
+        case .facebook: feeRate = 0.0
+        case .generic: feeRate = 0.0
+        }
+
+        let atMarket = market
+        let below10 = market * 0.90
+        let above10 = market * 1.10
+
+        // Net after fees
+        let netMarket = atMarket * (1 - feeRate)
+        let netBelow = below10 * (1 - feeRate)
+        let netAbove = above10 * (1 - feeRate)
+
+        return [
+            ("Market ($\(String(format: "%.2f", atMarket)), net $\(String(format: "%.2f", netMarket)))", atMarket),
+            ("Quick Sale -10% ($\(String(format: "%.2f", below10)), net $\(String(format: "%.2f", netBelow)))", below10),
+            ("Premium +10% ($\(String(format: "%.2f", above10)), net $\(String(format: "%.2f", netAbove)))", above10),
+        ]
+    }
+
+    // MARK: - SEO Tips
+
+    /// Generate SEO optimization tips for a card listing
+    static func seoTips(for card: InventoryCard, platform: ListingPlatform) -> [String] {
+        var tips: [String] = []
+
+        // Title tips
+        tips.append("Include set name and card number in the title for better search visibility")
+
+        if card.isGraded {
+            tips.append("Lead with the grade (e.g. 'PSA 10') - graded card buyers search by grade")
+        }
+
+        if card.variant != nil {
+            tips.append("Mention the variant (Holo, Full Art, etc.) - collectors search by variant type")
+        }
+
+        // Platform-specific
+        switch platform {
+        case .ebay:
+            tips.append("Use all 80 characters in the title - eBay search favors detailed titles")
+            tips.append("Add 'Pokemon TCG' at the end for broader search reach")
+        case .tcgplayer:
+            tips.append("TCGPlayer matches on card name - keep the title format standard")
+        case .facebook:
+            tips.append("Use common terms buyers search for (e.g. 'Pokemon card for sale')")
+            tips.append("Include city/state for local pickup visibility")
+        case .mercari:
+            tips.append("Front-load the card name - Mercari truncates long titles in search")
+        case .generic:
+            break
+        }
+
+        return tips
+    }
 }

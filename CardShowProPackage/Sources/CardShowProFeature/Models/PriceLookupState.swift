@@ -38,6 +38,9 @@ final class PriceLookupState {
     // Recent searches
     var recentSearches: [RecentSearch] = []
 
+    private static let recentSearchesKey = "recentSearches"
+    private static let maxRecentSearches = 20
+
     // MARK: - Computed Properties
 
     /// Whether we have enough data to perform a lookup
@@ -74,13 +77,26 @@ final class PriceLookupState {
         guard !trimmed.isEmpty else { return }
         recentSearches.removeAll { $0.cardName.lowercased() == trimmed.lowercased() }
         recentSearches.insert(RecentSearch(cardName: trimmed), at: 0)
-        if recentSearches.count > 10 {
-            recentSearches = Array(recentSearches.prefix(10))
+        if recentSearches.count > Self.maxRecentSearches {
+            recentSearches = Array(recentSearches.prefix(Self.maxRecentSearches))
         }
+        saveRecentSearches()
     }
 
     func clearRecentSearches() {
         recentSearches.removeAll()
+        UserDefaults.standard.removeObject(forKey: Self.recentSearchesKey)
+    }
+
+    /// Load recent searches from UserDefaults on startup
+    func loadRecentSearches() {
+        guard let names = UserDefaults.standard.stringArray(forKey: Self.recentSearchesKey) else { return }
+        recentSearches = names.map { RecentSearch(cardName: $0) }
+    }
+
+    private func saveRecentSearches() {
+        let names = recentSearches.map(\.cardName)
+        UserDefaults.standard.set(names, forKey: Self.recentSearchesKey)
     }
 
     func clearError() {

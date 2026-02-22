@@ -58,6 +58,13 @@ struct ScannedCardDetailView: View {
                             .padding(.top, 20)
                     }
 
+                    // Variant pricing breakdown
+                    if card.variantPricing.count > 1 {
+                        variantPricingSection
+                            .padding(.top, 20)
+                            .padding(.horizontal, 16)
+                    }
+
                     // Attribution
                     attributionSection
                         .padding(.top, 16)
@@ -417,6 +424,57 @@ struct ScannedCardDetailView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    // MARK: - Variant Pricing Section
+
+    private var variantPricingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(accentGreen)
+                Text("Price by Variant")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(card.variantPricing) { variant in
+                    Button {
+                        // Update display price to this variant
+                        if let market = variant.market {
+                            card.displayPrice = market
+                        }
+                    } label: {
+                        HStack {
+                            Text(variant.name)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.white)
+
+                            Spacer()
+
+                            Text(variant.displayPrice)
+                                .font(.system(size: 14, weight: .bold).monospacedDigit())
+                                .foregroundStyle(
+                                    card.displayPrice == variant.market
+                                        ? accentGreen
+                                        : .white
+                                )
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            card.displayPrice == variant.market
+                                ? accentGreen.opacity(0.12)
+                                : Color.white.opacity(0.06)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }

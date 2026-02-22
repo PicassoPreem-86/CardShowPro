@@ -184,31 +184,6 @@ public struct GeneratedListing: Sendable {
     }
 }
 
-// MARK: - Listing Template
-
-/// Custom listing templates (for future Phase 4)
-public struct ListingTemplate: Identifiable, Sendable {
-    public let id: UUID
-    public let name: String
-    public let titleTemplate: String
-    public let descriptionTemplate: String
-    public let platform: ListingPlatform
-
-    public init(
-        id: UUID = UUID(),
-        name: String,
-        titleTemplate: String,
-        descriptionTemplate: String,
-        platform: ListingPlatform
-    ) {
-        self.id = id
-        self.name = name
-        self.titleTemplate = titleTemplate
-        self.descriptionTemplate = descriptionTemplate
-        self.platform = platform
-    }
-}
-
 // MARK: - SEO Analysis
 
 /// SEO keyword analysis for listing optimization

@@ -182,6 +182,217 @@ final class AnalyticsService: Sendable {
         )
     }
 
+    // MARK: - Sales Velocity
+
+    /// Cards sold and revenue per week over a given period
+    func salesVelocity(transactions: [Transaction], period: Int = 30) -> (cardsPerWeek: Double, revenuePerWeek: Double) {
+        let calendar = Calendar.current
+        guard let cutoff = calendar.date(byAdding: .day, value: -period, to: Date()) else {
+            return (0, 0)
+        }
+        let recentSales = transactions.filter { $0.transactionType == .sale && $0.date >= cutoff }
+        let weeks = max(Double(period) / 7.0, 1.0)
+        let cardsPerWeek = Double(recentSales.count) / weeks
+        let revenuePerWeek = recentSales.reduce(0.0) { $0 + $1.netAmount } / weeks
+        return (cardsPerWeek: cardsPerWeek, revenuePerWeek: revenuePerWeek)
+    }
+
+    // MARK: - Sell-Through Rate
+
+    /// Ratio of sold cards to sold + listed cards
+    func sellThroughRate(cards: [InventoryCard]) -> Double {
+        let soldCount = cards.filter { $0.isSold }.count
+        let listedCount = cards.filter { $0.cardStatus == .listed }.count
+        let total = soldCount + listedCount
+        guard total > 0 else { return 0 }
+        return Double(soldCount) / Double(total)
+    }
+
+    // MARK: - Average Days to Sale
+
+    /// Average number of days between listing and sale for sold cards
+    func averageDaysToSale(cards: [InventoryCard]) -> Double? {
+        let soldWithDates = cards.filter { $0.isSold && $0.listedDate != nil && $0.soldDate != nil }
+        guard !soldWithDates.isEmpty else { return nil }
+        let calendar = Calendar.current
+        let totalDays = soldWithDates.reduce(0) { sum, card in
+            let days = calendar.dateComponents([.day], from: card.listedDate!, to: card.soldDate!).day ?? 0
+            return sum + max(days, 0)
+        }
+        return Double(totalDays) / Double(soldWithDates.count)
+    }
+
+    // MARK: - Inventory Turnover
+
+    /// Revenue divided by average inventory value
+    func inventoryTurnover(cards: [InventoryCard], transactions: [Transaction]) -> Double {
+        let revenue = transactions.filter { $0.transactionType == .sale }.reduce(0.0) { $0 + $1.netAmount }
+        let currentValue = cards.filter { $0.isAvailable }.reduce(0.0) { $0 + $1.marketValue }
+        let soldValue = cards.filter { $0.isSold }.reduce(0.0) { $0 + ($1.purchaseCost ?? 0) }
+        let avgInventory = (currentValue + soldValue) / 2.0
+        guard avgInventory > 0 else { return 0 }
+        return revenue / avgInventory
+    }
+
+    // MARK: - Realized Profit
+
+    /// Sum of profit from completed sale transactions only
+    func realizedProfit(transactions: [Transaction]) -> Double {
+        transactions.filter { $0.transactionType == .sale }.reduce(0.0) { $0 + $1.profit }
+    }
+
+    // MARK: - Platform Profitability
+
+    struct PlatformMetrics: Sendable, Identifiable {
+        let id = UUID()
+        let platform: String
+        let revenue: Double
+        let fees: Double
+        let netProfit: Double
+        let saleCount: Int
+        let averageSale: Double
+    }
+
+    /// Profitability breakdown by sales platform
+    func platformProfitability(transactions: [Transaction]) -> [PlatformMetrics] {
+        let sales = transactions.filter { $0.transactionType == .sale }
+        let grouped = Dictionary(grouping: sales, by: { $0.platform ?? "Unknown" })
+        return grouped.map { platform, txns in
+            let revenue = txns.reduce(0.0) { $0 + $1.amount }
+            let fees = txns.reduce(0.0) { $0 + $1.platformFees }
+            let netProfit = txns.reduce(0.0) { $0 + $1.profit }
+            let avgSale = txns.isEmpty ? 0 : revenue / Double(txns.count)
+            return PlatformMetrics(
+                platform: platform,
+                revenue: revenue,
+                fees: fees,
+                netProfit: netProfit,
+                saleCount: txns.count,
+                averageSale: avgSale
+            )
+        }
+        .sorted { $0.netProfit > $1.netProfit }
+    }
+
+    // MARK: - Acquisition Source ROI
+
+    /// Average ROI grouped by acquisition source
+    func acquisitionSourceROI(cards: [InventoryCard]) -> [(source: String, avgROI: Double, cardCount: Int)] {
+        let cardsWithSource = cards.filter { $0.acquisitionSource != nil && $0.purchaseCost != nil }
+        let grouped = Dictionary(grouping: cardsWithSource, by: { $0.acquisitionSource ?? "Unknown" })
+        return grouped.map { source, group in
+            let avgROI = group.isEmpty ? 0 : group.reduce(0.0) { $0 + $1.roi } / Double(group.count)
+            return (source: source, avgROI: avgROI, cardCount: group.count)
+        }
+        .sorted { $0.avgROI > $1.avgROI }
+    }
+
+    // MARK: - Period Comparison
+
+    struct PeriodComparison: Sendable {
+        let currentRevenue: Double
+        let previousRevenue: Double
+        let currentProfit: Double
+        let previousProfit: Double
+        let currentCardsSold: Int
+        let previousCardsSold: Int
+
+        var revenueChange: Double {
+            guard previousRevenue > 0 else { return 0 }
+            return (currentRevenue - previousRevenue) / previousRevenue
+        }
+
+        var profitChange: Double {
+            guard previousProfit != 0 else { return 0 }
+            return (currentProfit - previousProfit) / abs(previousProfit)
+        }
+    }
+
+    /// Compare current period vs previous period of the same length
+    func periodComparison(transactions: [Transaction], periodDays: Int = 30) -> PeriodComparison {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let periodStart = calendar.date(byAdding: .day, value: -periodDays, to: now),
+              let previousStart = calendar.date(byAdding: .day, value: -(periodDays * 2), to: now) else {
+            return PeriodComparison(currentRevenue: 0, previousRevenue: 0, currentProfit: 0, previousProfit: 0, currentCardsSold: 0, previousCardsSold: 0)
+        }
+
+        let sales = transactions.filter { $0.transactionType == .sale }
+        let currentSales = sales.filter { $0.date >= periodStart && $0.date <= now }
+        let previousSales = sales.filter { $0.date >= previousStart && $0.date < periodStart }
+
+        return PeriodComparison(
+            currentRevenue: currentSales.reduce(0.0) { $0 + $1.netAmount },
+            previousRevenue: previousSales.reduce(0.0) { $0 + $1.netAmount },
+            currentProfit: currentSales.reduce(0.0) { $0 + $1.profit },
+            previousProfit: previousSales.reduce(0.0) { $0 + $1.profit },
+            currentCardsSold: currentSales.count,
+            previousCardsSold: previousSales.count
+        )
+    }
+
+    // MARK: - Inventory Age Buckets
+
+    /// Group inventory cards by age into buckets
+    func inventoryAgeBuckets(cards: [InventoryCard]) -> [(label: String, count: Int, value: Double)] {
+        let active = cards.filter { $0.isAvailable }
+
+        let bucket0to30 = active.filter { $0.daysInInventory <= 30 }
+        let bucket31to60 = active.filter { $0.daysInInventory > 30 && $0.daysInInventory <= 60 }
+        let bucket61to90 = active.filter { $0.daysInInventory > 60 && $0.daysInInventory <= 90 }
+        let bucket90plus = active.filter { $0.daysInInventory > 90 }
+
+        return [
+            (label: "0-30d", count: bucket0to30.count, value: bucket0to30.reduce(0.0) { $0 + $1.marketValue }),
+            (label: "31-60d", count: bucket31to60.count, value: bucket31to60.reduce(0.0) { $0 + $1.marketValue }),
+            (label: "61-90d", count: bucket61to90.count, value: bucket61to90.reduce(0.0) { $0 + $1.marketValue }),
+            (label: "90d+", count: bucket90plus.count, value: bucket90plus.reduce(0.0) { $0 + $1.marketValue })
+        ]
+    }
+
+    // MARK: - Refund Rate
+
+    /// Ratio of refund transactions to sale transactions
+    func refundRate(transactions: [Transaction]) -> Double {
+        let saleCount = transactions.filter { $0.transactionType == .sale }.count
+        let refundCount = transactions.filter { $0.transactionType == .refund }.count
+        guard saleCount > 0 else { return 0 }
+        return Double(refundCount) / Double(saleCount)
+    }
+
+    // MARK: - Cumulative Profit Timeline
+
+    /// Returns a time series of cumulative realized profit from sales
+    func cumulativeProfitTimeline(transactions: [Transaction]) -> [TimeSeriesDataPoint] {
+        let sales = transactions.filter { $0.transactionType == .sale }.sorted { $0.date < $1.date }
+        var runningTotal = 0.0
+        return sales.map { txn in
+            runningTotal += txn.profit
+            return TimeSeriesDataPoint(date: txn.date, value: runningTotal)
+        }
+    }
+
+    // MARK: - Weekly Sales Counts
+
+    /// Returns cards sold per week as a time series
+    func weeklySalesCounts(transactions: [Transaction], weeks: Int = 12) -> [(weekLabel: String, count: Int)] {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let startDate = calendar.date(byAdding: .weekOfYear, value: -weeks, to: now) else { return [] }
+
+        let sales = transactions.filter { $0.transactionType == .sale && $0.date >= startDate }
+
+        var result: [(weekLabel: String, count: Int)] = []
+        for weekOffset in 0..<weeks {
+            guard let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: startDate),
+                  let weekEnd = calendar.date(byAdding: .weekOfYear, value: weekOffset + 1, to: startDate) else { continue }
+            let count = sales.filter { $0.date >= weekStart && $0.date < weekEnd }.count
+            let label = weekStart.formatted(.dateTime.month(.abbreviated).day())
+            result.append((weekLabel: label, count: count))
+        }
+        return result
+    }
+
     // MARK: - Insights
 
     private func computeInsights(

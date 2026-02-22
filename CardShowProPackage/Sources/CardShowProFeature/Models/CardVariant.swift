@@ -14,6 +14,21 @@ enum CardVariant: String, CaseIterable, Sendable {
 
     var displayName: String { rawValue }
 
+    /// Maps scan-flow CardVariant to the persisted InventoryCardVariant
+    func toInventoryVariant() -> InventoryCardVariant {
+        switch self {
+        case .standard: return .normal
+        case .holo: return .holofoil
+        case .reverseHolo: return .reverseHolofoil
+        case .firstEdition: return .firstEdition
+        case .shadowless: return .normal // closest match
+        case .pokemonCenter: return .specialArtRare
+        case .pokeball: return .normal
+        case .masterball: return .secretRare
+        case .goldStar: return .goldRare
+        }
+    }
+
     var priceMultiplier: Double {
         switch self {
         case .standard: return 1.0

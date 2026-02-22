@@ -23,6 +23,22 @@ struct ContactDetailView: View {
         allTransactions.filter { $0.contactId == contactID }
     }
 
+    /// Sales transactions only
+    private var salesTransactions: [Transaction] {
+        contactTransactions.filter { $0.transactionType == .sale }
+    }
+
+    /// Total revenue from this contact
+    private var totalRevenue: Double {
+        salesTransactions.reduce(0) { $0 + $1.amount }
+    }
+
+    /// Average transaction value
+    private var averageTransactionValue: Double {
+        guard !contactTransactions.isEmpty else { return 0 }
+        return contactTransactions.reduce(0) { $0 + $1.amount } / Double(contactTransactions.count)
+    }
+
     var body: some View {
         Group {
             if let contact {
@@ -90,9 +106,36 @@ struct ContactDetailView: View {
                         .font(DesignSystem.Typography.heading2)
                         .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-                    ContactTypeBadge(type: contact.contactTypeEnum)
+                    HStack(spacing: DesignSystem.Spacing.sm) {
+                        ContactTypeBadge(type: contact.contactTypeEnum)
+
+                        if let rating = contact.rating, rating > 0 {
+                            HStack(spacing: 2) {
+                                ForEach(1...5, id: \.self) { star in
+                                    Image(systemName: star <= rating ? "star.fill" : "star")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(star <= rating ? DesignSystem.Colors.thunderYellow : DesignSystem.Colors.textDisabled)
+                                }
+                            }
+                        }
+                    }
                 }
                 .padding(.top, DesignSystem.Spacing.lg)
+
+                // Tags
+                if !contact.tagsArray.isEmpty {
+                    tagsSection(contact)
+                }
+
+                // Follow-Up Reminder
+                if contact.hasFollowUp {
+                    followUpSection(contact)
+                }
+
+                // Customer Lifetime Value
+                if !contactTransactions.isEmpty {
+                    salesSummaryCard
+                }
 
                 // Quick Actions
                 if contact.hasContactMethod {
@@ -372,6 +415,159 @@ struct ContactDetailView: View {
         }
     }
 
+    // MARK: - Tags Section
+
+    @ViewBuilder
+    private func tagsSection(_ contact: Contact) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignSystem.Spacing.xxs) {
+                ForEach(contact.tagsArray, id: \.self) { tag in
+                    HStack(spacing: 3) {
+                        Image(systemName: "tag.fill")
+                            .font(.system(size: 9))
+                        Text(tag)
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(DesignSystem.Colors.electricBlue)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(DesignSystem.Colors.electricBlue.opacity(0.15))
+                    .clipShape(Capsule())
+                }
+            }
+        }
+    }
+
+    // MARK: - Follow-Up Section
+
+    @ViewBuilder
+    private func followUpSection(_ contact: Contact) -> some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            Text("Follow-Up Reminder")
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                .padding(.horizontal, DesignSystem.Spacing.xs)
+
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    Image(systemName: contact.isFollowUpOverdue ? "bell.badge.fill" : "bell.fill")
+                        .font(.body)
+                        .foregroundStyle(contact.isFollowUpOverdue ? DesignSystem.Colors.warning : DesignSystem.Colors.electricBlue)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let date = contact.followUpDate {
+                            HStack(spacing: DesignSystem.Spacing.xs) {
+                                Text(date.formatted(date: .abbreviated, time: .omitted))
+                                    .font(DesignSystem.Typography.body)
+                                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+
+                                if contact.isFollowUpOverdue {
+                                    Text("Overdue")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(DesignSystem.Colors.warning)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+
+                        if let note = contact.followUpNote, !note.isEmpty {
+                            Text(note)
+                                .font(DesignSystem.Typography.caption)
+                                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer()
+                }
+            }
+            .padding(DesignSystem.Spacing.md)
+            .background(
+                contact.isFollowUpOverdue
+                    ? DesignSystem.Colors.warning.opacity(0.08)
+                    : DesignSystem.Colors.cardBackground
+            )
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
+                    .strokeBorder(
+                        contact.isFollowUpOverdue ? DesignSystem.Colors.warning.opacity(0.3) : Color.clear,
+                        lineWidth: 1
+                    )
+            )
+        }
+    }
+
+    // MARK: - Sales Summary Card
+
+    @ViewBuilder
+    private var salesSummaryCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            Text("Customer Lifetime Value")
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                .padding(.horizontal, DesignSystem.Spacing.xs)
+
+            VStack(spacing: DesignSystem.Spacing.sm) {
+                // Total revenue
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Total Revenue")
+                            .font(DesignSystem.Typography.captionSmall)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+                        Text(totalRevenue.asCurrency)
+                            .font(DesignSystem.Typography.heading2.monospacedDigit())
+                            .foregroundStyle(DesignSystem.Colors.success)
+                    }
+                    Spacer()
+                    Image(systemName: "dollarsign.circle.fill")
+                        .font(.title)
+                        .foregroundStyle(DesignSystem.Colors.success.opacity(0.5))
+                }
+
+                Divider()
+
+                // Stats row
+                HStack(spacing: DesignSystem.Spacing.lg) {
+                    VStack(spacing: 2) {
+                        Text("\(contactTransactions.count)")
+                            .font(DesignSystem.Typography.heading3.monospacedDigit())
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        Text("Transactions")
+                            .font(DesignSystem.Typography.captionSmall)
+                            .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    }
+
+                    VStack(spacing: 2) {
+                        Text("\(salesTransactions.count)")
+                            .font(DesignSystem.Typography.heading3.monospacedDigit())
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        Text("Sales")
+                            .font(DesignSystem.Typography.captionSmall)
+                            .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    }
+
+                    VStack(spacing: 2) {
+                        Text(averageTransactionValue.asCurrency)
+                            .font(DesignSystem.Typography.heading3.monospacedDigit())
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        Text("Avg Value")
+                            .font(DesignSystem.Typography.captionSmall)
+                            .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(DesignSystem.Spacing.md)
+            .background(DesignSystem.Colors.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+        }
+    }
+
     // MARK: - Transaction History
 
     @ViewBuilder
@@ -485,6 +681,7 @@ private struct ContactTransactionRow: View {
         case .purchase: DesignSystem.Colors.electricBlue
         case .trade: DesignSystem.Colors.warning
         case .consignment: DesignSystem.Colors.textSecondary
+        case .refund: .red
         }
     }
 

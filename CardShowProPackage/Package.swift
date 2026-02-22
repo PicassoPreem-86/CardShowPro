@@ -18,12 +18,6 @@ let package = Package(
         .package(
             url: "https://github.com/supabase/supabase-swift",
             exact: "2.5.1"
-        ),
-
-        // RevenueCat for subscription management
-        .package(
-            url: "https://github.com/RevenueCat/purchases-ios",
-            exact: "4.43.2"
         )
     ],
     targets: [
@@ -32,8 +26,7 @@ let package = Package(
         .target(
             name: "CardShowProFeature",
             dependencies: [
-                .product(name: "Supabase", package: "supabase-swift"),
-                .product(name: "RevenueCat", package: "purchases-ios")
+                .product(name: "Supabase", package: "supabase-swift")
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency")

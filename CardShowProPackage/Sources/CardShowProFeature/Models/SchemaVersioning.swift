@@ -14,7 +14,11 @@ public enum SchemaV1: VersionedSchema {
             InventoryCard.self,
             Transaction.self,
             Contact.self,
-            Event.self
+            Event.self,
+            WishlistItem.self,
+            PriceCacheEntry.self,
+            ListingTemplate.self,
+            TradeRecord.self
         ]
     }
 }

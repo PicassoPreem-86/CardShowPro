@@ -7,15 +7,23 @@ struct MarkAsListedView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var listingPrice: String = ""
+    @State private var listingUrl: String = ""
     @State private var selectedPlatform: ListingPlatform = .ebay
     @State private var showSaveError = false
-    @FocusState private var priceFieldFocused: Bool
+    @FocusState private var focusedField: FocusField?
+
+    enum FocusField: Hashable {
+        case price, url
+    }
 
     enum ListingPlatform: String, CaseIterable, Identifiable {
         case ebay = "eBay"
         case tcgplayer = "TCGPlayer"
         case facebook = "Facebook Marketplace"
+        case whatnot = "Whatnot"
         case mercari = "Mercari"
+        case heritageAuctions = "Heritage Auctions"
+        case cardmarket = "Cardmarket"
         case local = "Local"
         case other = "Other"
 
@@ -26,7 +34,10 @@ struct MarkAsListedView: View {
             case .ebay: return "bag.fill"
             case .tcgplayer: return "creditcard.fill"
             case .facebook: return "person.2.fill"
+            case .whatnot: return "video.fill"
             case .mercari: return "shippingbox.fill"
+            case .heritageAuctions: return "building.columns.fill"
+            case .cardmarket: return "globe.europe.africa.fill"
             case .local: return "mappin.circle.fill"
             case .other: return "ellipsis.circle.fill"
             }
@@ -48,6 +59,7 @@ struct MarkAsListedView: View {
                     cardHeader
                     priceSection
                     platformSection
+                    listingUrlSection
                     confirmButton
                 }
                 .padding(DesignSystem.Spacing.sm)
@@ -61,7 +73,7 @@ struct MarkAsListedView: View {
                         .foregroundStyle(DesignSystem.Colors.cyan)
                 }
                 ToolbarItem(placement: .keyboard) {
-                    Button("Done") { priceFieldFocused = false }
+                    Button("Done") { focusedField = nil }
                 }
             }
             .onAppear {
@@ -131,7 +143,7 @@ struct MarkAsListedView: View {
                 TextField("0.00", text: $listingPrice)
                     .font(DesignSystem.Typography.heading2.monospacedDigit())
                     .keyboardType(.decimalPad)
-                    .focused($priceFieldFocused)
+                    .focused($focusedField, equals: .price)
             }
             .padding(DesignSystem.Spacing.md)
             .background(DesignSystem.Colors.backgroundSecondary)
@@ -139,7 +151,7 @@ struct MarkAsListedView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
                     .stroke(
-                        priceFieldFocused ? DesignSystem.Colors.electricBlue : Color.clear,
+                        focusedField == .price ? DesignSystem.Colors.electricBlue : Color.clear,
                         lineWidth: 2
                     )
             )
@@ -198,6 +210,39 @@ struct MarkAsListedView: View {
         }
     }
 
+    // MARK: - Listing URL Section
+
+    private var listingUrlSection: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
+            Text("LISTING URL (OPTIONAL)")
+                .font(DesignSystem.Typography.captionBold)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+            HStack(spacing: DesignSystem.Spacing.xs) {
+                Image(systemName: "link")
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    .frame(width: 24)
+                TextField("https://...", text: $listingUrl)
+                    .font(DesignSystem.Typography.body)
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .focused($focusedField, equals: .url)
+            }
+            .padding(DesignSystem.Spacing.sm)
+            .background(DesignSystem.Colors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
+                    .stroke(
+                        focusedField == .url ? DesignSystem.Colors.electricBlue : Color.clear,
+                        lineWidth: 2
+                    )
+            )
+        }
+    }
+
     // MARK: - Confirm Button
 
     private var confirmButton: some View {
@@ -227,6 +272,11 @@ struct MarkAsListedView: View {
         card.platform = selectedPlatform.rawValue
         card.listingPrice = priceValue
         card.listedDate = Date()
+
+        let trimmedUrl = listingUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedUrl.isEmpty {
+            card.listingUrl = trimmedUrl
+        }
 
         do {
             try modelContext.save()

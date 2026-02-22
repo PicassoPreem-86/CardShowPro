@@ -41,6 +41,25 @@ final class ScannedCard: Identifiable, Hashable {
     var tcgPlayerBuyURL: URL?
     var rarity: String?
 
+    // Variant pricing (all available variants from TCGPlayer)
+    var variantPricing: [VariantPricingInfo] = []
+
+    /// A single variant's pricing info for display
+    struct VariantPricingInfo: Identifiable {
+        let id = UUID()
+        let name: String
+        let market: Double?
+        let low: Double?
+        let mid: Double?
+        let high: Double?
+
+        var displayPrice: String {
+            if let market { return "$\(String(format: "%.2f", market))" }
+            if let mid { return "$\(String(format: "%.2f", mid))" }
+            return "N/A"
+        }
+    }
+
     // Convenience: card name alias for backward compatibility
     var cardName: String {
         get { name }

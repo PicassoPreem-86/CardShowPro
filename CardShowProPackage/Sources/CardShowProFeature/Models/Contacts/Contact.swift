@@ -146,6 +146,12 @@ public final class Contact {
     public var eventName: String?
     public var venue: String?
 
+    // CRM enhancements
+    public var tags: String?
+    public var followUpDate: Date?
+    public var followUpNote: String?
+    public var rating: Int?
+
     init(
         id: UUID = UUID(),
         name: String,
@@ -163,7 +169,11 @@ public final class Contact {
         specialties: String? = nil,
         organization: String? = nil,
         eventName: String? = nil,
-        venue: String? = nil
+        venue: String? = nil,
+        tags: String? = nil,
+        followUpDate: Date? = nil,
+        followUpNote: String? = nil,
+        rating: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -182,6 +192,10 @@ public final class Contact {
         self.organization = organization
         self.eventName = eventName
         self.venue = venue
+        self.tags = tags
+        self.followUpDate = followUpDate
+        self.followUpNote = followUpNote
+        self.rating = rating
     }
 
     // MARK: - Typed Enum Accessors
@@ -248,6 +262,45 @@ public final class Contact {
         case .other:
             return nil
         }
+    }
+
+    // MARK: - Tags
+
+    /// Split comma-separated tags into an array
+    public var tagsArray: [String] {
+        get {
+            guard let tags, !tags.isEmpty else { return [] }
+            return tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        set {
+            tags = newValue.isEmpty ? nil : newValue.joined(separator: ", ")
+        }
+    }
+
+    /// Whether the contact has a specific tag (case-insensitive)
+    public func hasTag(_ tag: String) -> Bool {
+        tagsArray.contains { $0.caseInsensitiveCompare(tag) == .orderedSame }
+    }
+
+    // MARK: - Follow-Up
+
+    /// Whether a follow-up is overdue (past the followUpDate)
+    public var isFollowUpOverdue: Bool {
+        guard let followUpDate else { return false }
+        return followUpDate < Date()
+    }
+
+    /// Whether a follow-up is scheduled (has a date, not yet overdue)
+    public var hasFollowUp: Bool {
+        followUpDate != nil
+    }
+
+    // MARK: - Rating Display
+
+    /// Star rating display string (e.g. "4/5")
+    public var ratingDisplay: String? {
+        guard let rating else { return nil }
+        return "\(rating)/5"
     }
 }
 

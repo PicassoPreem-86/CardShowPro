@@ -48,21 +48,30 @@ struct SettingsView: View {
     // Business profile
     @AppStorage("businessName") private var businessName: String = ""
     @AppStorage("defaultPlatform") private var defaultPlatform: String = SalesPlatform.eBay.rawValue
+    @AppStorage("defaultShippingCost") private var defaultShippingCost: Double = 5.00
 
     // Export state
     @State private var exportText: String?
     @State private var exportFileName: String = "export.csv"
     @State private var showingShare = false
 
+    // Notification settings
+    @State private var notificationSettings = NotificationService.shared.settings
+    @State private var notificationsAuthorized = false
+
     // Confirmation alerts
     @State private var showResetAlert = false
     @State private var showDeleteAlert = false
+    @State private var showClearCacheAlert = false
+    @State private var cachedPriceCount: Int = 0
 
     var body: some View {
         NavigationStack {
             Form {
                 businessProfileSection
+                notificationSection
                 showModeSection
+                cacheManagementSection
                 dataExportSection
                 dataManagementSection
                 aboutSection
@@ -89,6 +98,17 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("This will delete all existing data and re-seed with sample cards and transactions.")
+            }
+            .alert("Clear Price Cache?", isPresented: $showClearCacheAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear", role: .destructive) {
+                    clearPriceCache()
+                }
+            } message: {
+                Text("This will remove all cached card prices. Prices will be re-fetched on next lookup.")
+            }
+            .task {
+                notificationsAuthorized = await NotificationService.shared.isAuthorized()
             }
             .alert("Delete All Data?", isPresented: $showDeleteAlert) {
                 Button("Cancel", role: .cancel) {}
@@ -121,6 +141,18 @@ struct SettingsView: View {
                         Text(platform.rawValue).tag(platform.rawValue)
                     }
                 }
+            }
+
+            HStack(spacing: DesignSystem.Spacing.xs) {
+                Image(systemName: "shippingbox.fill")
+                    .foregroundStyle(DesignSystem.Colors.cyan)
+                    .frame(width: 24)
+                Text("Default Shipping")
+                Spacer()
+                TextField("$0.00", value: $defaultShippingCost, format: .currency(code: "USD"))
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 80)
             }
         } header: {
             Text("Business Profile")
@@ -163,6 +195,115 @@ struct SettingsView: View {
             }
         } header: {
             Text("Show Mode")
+        }
+    }
+
+    // MARK: - Notifications
+
+    private var notificationSection: some View {
+        Section {
+            // System authorization status
+            if !notificationsAuthorized {
+                HStack(spacing: DesignSystem.Spacing.xs) {
+                    Image(systemName: "bell.slash.fill")
+                        .foregroundStyle(DesignSystem.Colors.warning)
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Notifications Disabled")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Text("Enable in iOS Settings to receive alerts")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                }
+            }
+
+            // Category toggles
+            ForEach(NotificationCategory.allCases, id: \.rawValue) { category in
+                Toggle(isOn: Binding(
+                    get: { notificationSettings.isEnabled(category) },
+                    set: { _ in
+                        notificationSettings.toggle(category)
+                        NotificationService.shared.updateSettings(notificationSettings)
+                        if !notificationSettings.isEnabled(category) {
+                            NotificationService.shared.cancelCategory(category)
+                        }
+                    }
+                )) {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
+                        Image(systemName: category.icon)
+                            .foregroundStyle(DesignSystem.Colors.cyan)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(category.title)
+                                .font(.subheadline)
+                            Text(category.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .tint(DesignSystem.Colors.cyan)
+            }
+
+            // Stale listing threshold
+            if notificationSettings.isEnabled(.staleListings) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
+                    Image(systemName: "calendar.badge.clock")
+                        .foregroundStyle(DesignSystem.Colors.warning)
+                        .frame(width: 24)
+                    Text("Stale After")
+                    Spacer()
+                    Picker("", selection: Binding(
+                        get: { notificationSettings.staleListingDays },
+                        set: {
+                            notificationSettings.staleListingDays = $0
+                            NotificationService.shared.setStaleListingDays($0)
+                        }
+                    )) {
+                        Text("7 days").tag(7)
+                        Text("14 days").tag(14)
+                        Text("30 days").tag(30)
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+
+            // Slow inventory threshold
+            if notificationSettings.isEnabled(.slowInventory) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .foregroundStyle(DesignSystem.Colors.warning)
+                        .frame(width: 24)
+                    Text("Slow After")
+                    Spacer()
+                    Picker("", selection: Binding(
+                        get: { notificationSettings.slowInventoryDays },
+                        set: {
+                            notificationSettings.slowInventoryDays = $0
+                            NotificationService.shared.setSlowInventoryDays($0)
+                        }
+                    )) {
+                        Text("30 days").tag(30)
+                        Text("60 days").tag(60)
+                        Text("90 days").tag(90)
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+        } header: {
+            Text("Notifications")
+        } footer: {
+            Text("Max 3 alerts per day. Scheduled reminders (events, follow-ups) are always delivered.")
         }
     }
 
@@ -227,6 +368,34 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Cache Management
+
+    private var cacheManagementSection: some View {
+        Section {
+            HStack {
+                Label("Price Cache", systemImage: "cylinder.split.1x2.fill")
+                Spacer()
+                Text("\(cachedPriceCount) cards cached")
+                    .foregroundStyle(.secondary)
+            }
+            .task {
+                let repo = PriceCacheRepository(modelContext: modelContext)
+                cachedPriceCount = repo.persistedEntryCount()
+            }
+
+            Button(role: .destructive) {
+                showClearCacheAlert = true
+            } label: {
+                Label("Clear Price Cache", systemImage: "trash")
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text("Cache")
+        } footer: {
+            Text("Cached prices speed up lookups and work offline. Prices auto-refresh after 24 hours.")
+        }
+    }
+
     // MARK: - About
 
     private var aboutSection: some View {
@@ -237,8 +406,13 @@ struct SettingsView: View {
                 Text("CardShowPro")
                     .font(.headline)
                 Spacer()
-                Text("v\(appVersion)")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("v\(appVersion)")
+                        .foregroundStyle(.secondary)
+                    Text("Build \(buildNumber)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         } header: {
             Text("About")
@@ -269,6 +443,12 @@ struct SettingsView: View {
         MockDataSeeder.seedIfNeeded(context: modelContext)
     }
 
+    private func clearPriceCache() {
+        let repo = PriceCacheRepository(modelContext: modelContext)
+        repo.clearCache()
+        cachedPriceCount = 0
+    }
+
     private func deleteAllData() {
         do {
             try modelContext.delete(model: InventoryCard.self)
@@ -283,5 +463,9 @@ struct SettingsView: View {
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
 }

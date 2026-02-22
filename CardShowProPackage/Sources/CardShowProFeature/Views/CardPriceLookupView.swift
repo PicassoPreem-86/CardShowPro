@@ -87,6 +87,9 @@ struct CardPriceLookupView: View {
             .navigationTitle("Price Lookup")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
+            .task {
+                lookupState.loadRecentSearches()
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()

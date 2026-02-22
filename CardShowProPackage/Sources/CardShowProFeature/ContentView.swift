@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 
 public struct ContentView: View {
     @State private var appState = AppState()
+    @Environment(\.modelContext) private var modelContext
 
     public var body: some View {
         TabView(selection: $appState.selectedTab) {
@@ -34,6 +36,9 @@ public struct ContentView: View {
                 .tag(AppState.Tab.tools)
         }
         .preferredColorScheme(.dark)
+        .task {
+            await NotificationService.shared.performLaunchChecks(modelContext: modelContext)
+        }
     }
 
     public init() {

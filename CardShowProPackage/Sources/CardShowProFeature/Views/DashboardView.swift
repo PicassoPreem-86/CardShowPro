@@ -5,13 +5,18 @@ struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @Query private var inventoryCards: [InventoryCard]
     @Query private var transactions: [Transaction]
+    @Query(filter: #Predicate<WishlistItem> { !$0.isFulfilled }) private var wishlistItems: [WishlistItem]
+    @Query private var contacts: [Contact]
     @State private var showCamera = false
     @State private var showSettings = false
     @State private var showAddItem = false
     @State private var showTransactions = false
     @State private var showEventHistory = false
+    @State private var showSearch = false
+    @State private var showCreateEvent = false
     @State private var selectedPeriod = "1M"
     @State private var selectedTab = "Overview"
+    @State private var analyticsService = AnalyticsService()
 
     // Calculated stats from real inventory
     private var activeCards: [InventoryCard] {
@@ -113,6 +118,15 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+                    }
+                    .accessibilityLabel("Search everything")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showSettings = true
@@ -145,6 +159,14 @@ struct DashboardView: View {
                     EventHistoryView()
                 }
             }
+            .sheet(isPresented: $showSearch) {
+                NavigationStack {
+                    UnifiedSearchView()
+                }
+            }
+            .sheet(isPresented: $showCreateEvent) {
+                CreateEventView()
+            }
         }
     }
 
@@ -155,37 +177,47 @@ struct DashboardView: View {
                 .font(.headline)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 12) {
-                QuickActionButton(
-                    title: "Price\nLookup",
-                    icon: "magnifyingglass.circle.fill",
-                    color: .cyan
-                ) {
-                    showCamera = true
-                }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    QuickActionButton(
+                        title: "Price\nLookup",
+                        icon: "magnifyingglass.circle.fill",
+                        color: .cyan
+                    ) {
+                        showCamera = true
+                    }
 
-                QuickActionButton(
-                    title: "Add\nManual",
-                    icon: "plus.square.fill",
-                    color: .green
-                ) {
-                    showAddItem = true
-                }
+                    QuickActionButton(
+                        title: "Add\nManual",
+                        icon: "plus.square.fill",
+                        color: .green
+                    ) {
+                        showAddItem = true
+                    }
 
-                QuickActionButton(
-                    title: "Trans-\nactions",
-                    icon: "arrow.left.arrow.right.circle.fill",
-                    color: .orange
-                ) {
-                    showTransactions = true
-                }
+                    QuickActionButton(
+                        title: "Start\nEvent",
+                        icon: "calendar.badge.plus",
+                        color: .orange
+                    ) {
+                        showCreateEvent = true
+                    }
 
-                QuickActionButton(
-                    title: "Event\nHistory",
-                    icon: "calendar.circle.fill",
-                    color: .purple
-                ) {
-                    showEventHistory = true
+                    QuickActionButton(
+                        title: "Trans-\nactions",
+                        icon: "arrow.left.arrow.right.circle.fill",
+                        color: .purple
+                    ) {
+                        showTransactions = true
+                    }
+
+                    QuickActionButton(
+                        title: "Event\nHistory",
+                        icon: "calendar.circle.fill",
+                        color: .indigo
+                    ) {
+                        showEventHistory = true
+                    }
                 }
             }
         }
@@ -268,12 +300,28 @@ struct DashboardView: View {
             ))
         }
 
+        let overdueFollowUps = contacts.filter { $0.isFollowUpOverdue }
+        if !overdueFollowUps.isEmpty {
+            let names = overdueFollowUps.prefix(2).map(\.name).joined(separator: ", ")
+            let suffix = overdueFollowUps.count > 2 ? " + \(overdueFollowUps.count - 2) more" : ""
+            items.append(AlertItem(
+                title: "\(overdueFollowUps.count) overdue follow-up\(overdueFollowUps.count == 1 ? "" : "s")",
+                subtitle: names + suffix,
+                icon: "bell.badge.fill",
+                color: DesignSystem.Colors.warning
+            ))
+        }
+
         return items
     }
 
     // MARK: - Sales Performance
     private var salesPerformanceSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let sellThrough = analyticsService.sellThroughRate(cards: inventoryCards)
+        let avgDays = analyticsService.averageDaysToSale(cards: inventoryCards)
+        let realized = analyticsService.realizedProfit(transactions: transactions)
+
+        return VStack(alignment: .leading, spacing: 12) {
             Text("Sales Performance")
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -306,13 +354,36 @@ struct DashboardView: View {
                     value: String(format: "%.0f%%", profitMargin),
                     label: "Profit Margin"
                 )
+
+                StatsCard(
+                    icon: "gauge.with.needle.fill",
+                    iconColor: .purple,
+                    value: String(format: "%.0f%%", sellThrough * 100),
+                    label: "Sell-Through Rate"
+                )
+
+                StatsCard(
+                    icon: "clock.fill",
+                    iconColor: .teal,
+                    value: avgDays.map { String(format: "%.0fd", $0) } ?? "--",
+                    label: "Avg Days to Sale"
+                )
+
+                StatsCard(
+                    icon: "banknote.fill",
+                    iconColor: .green,
+                    value: formatCurrency(realized),
+                    label: "Realized Profit"
+                )
             }
         }
     }
 
     // MARK: - Inventory Health
     private var inventoryHealthSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let turnover = analyticsService.inventoryTurnover(cards: inventoryCards, transactions: transactions)
+
+        return VStack(alignment: .leading, spacing: 12) {
             Text("Inventory Health")
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -344,6 +415,20 @@ struct DashboardView: View {
                     iconColor: .orange,
                     value: "\(slowStockCount)",
                     label: "Slow Stock (90d+)"
+                )
+
+                StatsCard(
+                    icon: "arrow.3.trianglepath",
+                    iconColor: .mint,
+                    value: String(format: "%.1fx", turnover),
+                    label: "Inventory Turnover"
+                )
+
+                StatsCard(
+                    icon: "heart.text.clipboard.fill",
+                    iconColor: .pink,
+                    value: "\(wishlistItems.count)",
+                    label: "On Wishlist"
                 )
             }
         }
@@ -506,6 +591,7 @@ private struct DashboardActivityRow: View {
         case .purchase: return "arrow.up.circle.fill"
         case .trade: return "arrow.triangle.2.circlepath.circle.fill"
         case .consignment: return "shippingbox.circle.fill"
+        case .refund: return "arrow.uturn.backward.circle.fill"
         }
     }
 
@@ -515,6 +601,7 @@ private struct DashboardActivityRow: View {
         case .purchase: return DesignSystem.Colors.electricBlue
         case .trade: return .orange
         case .consignment: return .purple
+        case .refund: return .red
         }
     }
 }

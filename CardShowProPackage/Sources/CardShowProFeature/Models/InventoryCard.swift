@@ -10,6 +10,8 @@ public enum CardStatus: String, CaseIterable, Codable, Sendable {
     case listed = "Listed"
     case sold = "Sold"
     case shipped = "Shipped"
+    case returned = "Returned"
+    case disputed = "Disputed"
 
     public var icon: String {
         switch self {
@@ -17,6 +19,8 @@ public enum CardStatus: String, CaseIterable, Codable, Sendable {
         case .listed: return "tag.fill"
         case .sold: return "dollarsign.circle.fill"
         case .shipped: return "paperplane.fill"
+        case .returned: return "arrow.uturn.backward.circle.fill"
+        case .disputed: return "exclamationmark.triangle.fill"
         }
     }
 
@@ -26,6 +30,51 @@ public enum CardStatus: String, CaseIterable, Codable, Sendable {
         case .listed: return "blue"
         case .sold: return "green"
         case .shipped: return "gray"
+        case .returned: return "red"
+        case .disputed: return "orange"
+        }
+    }
+}
+
+// MARK: - Card Variant (Inventory)
+
+/// Card variant types for inventory tracking
+public enum InventoryCardVariant: String, CaseIterable, Codable, Sendable {
+    case normal = "Normal"
+    case holofoil = "Holofoil"
+    case reverseHolofoil = "Reverse Holofoil"
+    case firstEdition = "1st Edition"
+    case unlimited = "Unlimited"
+    case secretRare = "Secret Rare"
+    case fullArt = "Full Art"
+    case altArt = "Alt Art"
+    case illustrationRare = "Illustration Rare"
+    case specialArtRare = "Special Art Rare"
+    case hyperRare = "Hyper Rare"
+    case goldRare = "Gold Rare"
+
+    public var displayName: String { rawValue }
+}
+
+// MARK: - Shipping Carrier
+
+/// Supported shipping carriers
+public enum ShippingCarrier: String, CaseIterable, Codable, Sendable {
+    case usps = "USPS"
+    case ups = "UPS"
+    case fedex = "FedEx"
+    case dhl = "DHL"
+    case other = "Other"
+
+    public var displayName: String { rawValue }
+
+    public var trackingUrlTemplate: String {
+        switch self {
+        case .usps: return "https://tools.usps.com/go/TrackConfirmAction?tLabels={tracking}"
+        case .ups: return "https://www.ups.com/track?tracknum={tracking}"
+        case .fedex: return "https://www.fedex.com/fedextrack/?trknbr={tracking}"
+        case .dhl: return "https://www.dhl.com/us-en/home/tracking.html?tracking-id={tracking}"
+        case .other: return ""
         }
     }
 }
@@ -97,6 +146,27 @@ public final class InventoryCard {
     public var soldDate: Date?
     public var listingPrice: Double?
     public var listedDate: Date?
+
+    // Card variant
+    public var variant: String?
+
+    // Organization
+    public var tags: String?
+    public var storageLocation: String?
+
+    // Shipping & fulfillment
+    public var trackingNumber: String?
+    public var carrier: String?
+    public var shippedDate: Date?
+
+    // Listing details
+    public var listingUrl: String?
+    public var platformListingId: String?
+
+    // Returns
+    public var returnReason: String?
+    public var refundAmount: Double?
+    public var refundDate: Date?
 
     // Store image as Data since SwiftData doesn't support UIImage directly
     @Attribute(.externalStorage) public var imageData: Data?
@@ -255,5 +325,39 @@ public final class InventoryCard {
     public var daysInInventory: Int {
         let reference = acquisitionDate ?? timestamp
         return Calendar.current.dateComponents([.day], from: reference, to: Date()).day ?? 0
+    }
+
+    // MARK: - Variant & Carrier Helpers
+
+    /// Split comma-separated tags into an array
+    public var tagsArray: [String] {
+        guard let tags, !tags.isEmpty else { return [] }
+        return tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    /// Get the InventoryCardVariant enum from the stored string
+    public var variantType: InventoryCardVariant? {
+        guard let variant else { return nil }
+        return InventoryCardVariant(rawValue: variant)
+    }
+
+    /// Get the ShippingCarrier enum from the stored string
+    public var carrierType: ShippingCarrier? {
+        guard let carrier else { return nil }
+        return ShippingCarrier(rawValue: carrier)
+    }
+
+    /// Whether the card has been returned
+    public var isReturned: Bool {
+        refundDate != nil
+    }
+
+    /// Net profit accounting for refunds (soldPrice - purchaseCost - gradingCost - refundAmount)
+    public var netProfit: Double? {
+        guard let sold = soldPrice else { return nil }
+        let cost = purchaseCost ?? 0
+        let grading = gradingCost ?? 0
+        let refund = refundAmount ?? 0
+        return sold - cost - grading - refund
     }
 }

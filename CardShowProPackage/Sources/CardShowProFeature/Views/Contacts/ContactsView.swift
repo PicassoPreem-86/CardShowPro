@@ -7,16 +7,33 @@ struct ContactsView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var searchText: String = ""
     @State private var selectedTypeFilter: ContactType?
+    @State private var selectedTagFilter: String?
     @State private var showingAddSheet = false
     @State private var selectedContactID: UUID?
 
-    /// Filtered contacts based on search text and type filter
+    /// All unique tags across all contacts
+    private var allTags: [String] {
+        var tagSet: Set<String> = []
+        for contact in contacts {
+            for tag in contact.tagsArray {
+                tagSet.insert(tag)
+            }
+        }
+        return tagSet.sorted()
+    }
+
+    /// Filtered contacts based on search text, type filter, and tag filter
     private var filteredContacts: [Contact] {
         var filtered = contacts
 
         // Apply type filter
         if let typeFilter = selectedTypeFilter {
             filtered = filtered.filter { $0.contactTypeEnum == typeFilter }
+        }
+
+        // Apply tag filter
+        if let tagFilter = selectedTagFilter {
+            filtered = filtered.filter { $0.hasTag(tagFilter) }
         }
 
         // Apply search
@@ -30,7 +47,8 @@ struct ContactsView: View {
                 contact.collectingInterests?.lowercased().contains(searchLower) == true ||
                 contact.buyingPreferences?.lowercased().contains(searchLower) == true ||
                 contact.specialties?.lowercased().contains(searchLower) == true ||
-                contact.organization?.lowercased().contains(searchLower) == true
+                contact.organization?.lowercased().contains(searchLower) == true ||
+                contact.tags?.lowercased().contains(searchLower) == true
             }
         }
 
@@ -43,40 +61,47 @@ struct ContactsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottomTrailing) {
-                // Main Content
-                Group {
-                    if contacts.isEmpty && searchText.isEmpty {
-                        emptyStateView
-                    } else {
-                        VStack(spacing: 0) {
-                            // Type filter chips
-                            typeFilterBar
-                                .padding(.horizontal, DesignSystem.Spacing.md)
-                                .padding(.vertical, DesignSystem.Spacing.xs)
+        ZStack(alignment: .bottomTrailing) {
+            // Main Content
+            Group {
+                if contacts.isEmpty && searchText.isEmpty {
+                    emptyStateView
+                } else {
+                    VStack(spacing: 0) {
+                        // Type filter chips
+                        typeFilterBar
+                            .padding(.horizontal, DesignSystem.Spacing.md)
+                            .padding(.top, DesignSystem.Spacing.xs)
 
-                            if filteredContacts.isEmpty {
-                                noResultsView
-                            } else {
-                                contactsList
-                            }
+                        // Tag filter pills
+                        if !allTags.isEmpty {
+                            tagFilterBar
+                                .padding(.horizontal, DesignSystem.Spacing.md)
+                                .padding(.top, DesignSystem.Spacing.xxxs)
+                        }
+
+                        Spacer().frame(height: DesignSystem.Spacing.xs)
+
+                        if filteredContacts.isEmpty {
+                            noResultsView
+                        } else {
+                            contactsList
                         }
                     }
                 }
+            }
 
-                // Floating Action Button
-                fabButton
-            }
-            .navigationTitle("Contacts")
-            .searchable(text: $searchText, prompt: "Search contacts")
-            .background(DesignSystem.Colors.backgroundPrimary)
-            .navigationDestination(item: $selectedContactID) { contactID in
-                ContactDetailView(contactID: contactID)
-            }
-            .sheet(isPresented: $showingAddSheet) {
-                AddEditContactView()
-            }
+            // Floating Action Button
+            fabButton
+        }
+        .navigationTitle("Contacts")
+        .searchable(text: $searchText, prompt: "Search contacts")
+        .background(DesignSystem.Colors.backgroundPrimary)
+        .navigationDestination(item: $selectedContactID) { contactID in
+            ContactDetailView(contactID: contactID)
+        }
+        .sheet(isPresented: $showingAddSheet) {
+            AddEditContactView()
         }
     }
 
@@ -112,6 +137,47 @@ struct ContactsView: View {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // MARK: - Tag Filter Bar
+
+    @ViewBuilder
+    private var tagFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignSystem.Spacing.xxs) {
+                ForEach(allTags, id: \.self) { tag in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedTagFilter = selectedTagFilter == tag ? nil : tag
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "tag.fill")
+                                .font(.system(size: 9))
+                            Text(tag)
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(selectedTagFilter == tag ? .white : DesignSystem.Colors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            selectedTagFilter == tag
+                                ? DesignSystem.Colors.electricBlue
+                                : DesignSystem.Colors.backgroundTertiary
+                        )
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(
+                                    selectedTagFilter == tag ? Color.clear : DesignSystem.Colors.borderPrimary,
+                                    lineWidth: 1
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -312,6 +378,8 @@ private struct FilterChip: View {
 // MARK: - Previews
 
 #Preview("Contacts") {
-    ContactsView()
-        .modelContainer(for: Contact.self, inMemory: true)
+    NavigationStack {
+        ContactsView()
+    }
+    .modelContainer(for: Contact.self, inMemory: true)
 }

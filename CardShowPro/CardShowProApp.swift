@@ -8,11 +8,19 @@ struct CardShowProApp: App {
 
     init() {
         do {
-            let schema = Schema(versionedSchema: SchemaV1.self)
+            let schema = Schema([
+                InventoryCard.self,
+                Transaction.self,
+                Contact.self,
+                Event.self,
+                WishlistItem.self,
+                PriceCacheEntry.self,
+                ListingTemplate.self,
+                TradeRecord.self
+            ])
             let config = ModelConfiguration(schema: schema)
             modelContainer = try ModelContainer(
                 for: schema,
-                migrationPlan: CardShowProMigrationPlan.self,
                 configurations: config
             )
             MockDataSeeder.seedIfNeeded(context: modelContainer.mainContext)

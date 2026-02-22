@@ -17,6 +17,8 @@ struct TransactionRow: View {
             return DesignSystem.Colors.warning
         case .consignment:
             return Color.purple
+        case .refund:
+            return .red
         }
     }
 
@@ -26,6 +28,7 @@ struct TransactionRow: View {
         case .purchase: return .blue
         case .trade: return DesignSystem.Colors.warning
         case .consignment: return .purple
+        case .refund: return .red
         }
     }
 
@@ -33,6 +36,7 @@ struct TransactionRow: View {
         switch txType {
         case .sale: return "+"
         case .purchase: return "-"
+        case .refund: return "-"
         case .trade, .consignment: return ""
         }
     }

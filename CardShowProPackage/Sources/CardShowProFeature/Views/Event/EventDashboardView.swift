@@ -10,12 +10,16 @@ struct EventDashboardView: View {
     @Environment(\.modelContext) private var modelContext
 
     @Query private var allTransactions: [Transaction]
+    @Query private var allCards: [InventoryCard]
 
     @State private var showQuickSale = false
     @State private var showQuickBuy = false
     @State private var showEndEvent = false
     @State private var elapsedTime: TimeInterval = 0
     @State private var timer: Timer?
+    @State private var lookupSearchText = ""
+    @State private var revenueGoal: Double = 0
+    @State private var showGoalEntry = false
 
     // MARK: - Filtered Transactions
 
@@ -53,6 +57,17 @@ struct EventDashboardView: View {
         purchaseTransactions.count
     }
 
+    // MARK: - Price Lookup
+
+    private var lookupResults: [InventoryCard] {
+        guard !lookupSearchText.isEmpty else { return [] }
+        let query = lookupSearchText.lowercased()
+        return allCards.filter {
+            $0.cardName.lowercased().contains(query) ||
+            $0.setName.lowercased().contains(query)
+        }.prefix(5).map { $0 }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: DesignSystem.Spacing.lg) {
@@ -61,6 +76,17 @@ struct EventDashboardView: View {
 
                 // Timer
                 runningTimer
+
+                // Quick Price Lookup
+                priceLookupBar
+
+                // Running sales counter
+                salesCounter
+
+                // Revenue Goal Progress
+                if revenueGoal > 0 {
+                    goalProgress
+                }
 
                 // Live Stats Grid
                 statsGrid
@@ -214,6 +240,150 @@ struct EventDashboardView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Price Lookup Bar
+
+    private var priceLookupBar: some View {
+        VStack(spacing: DesignSystem.Spacing.sm) {
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+
+                TextField("Quick price lookup...", text: $lookupSearchText)
+                    .font(DesignSystem.Typography.body)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    .autocorrectionDisabled()
+
+                if !lookupSearchText.isEmpty {
+                    Button {
+                        lookupSearchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    }
+                }
+            }
+            .padding(DesignSystem.Spacing.sm)
+            .background(DesignSystem.Colors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+
+            if !lookupResults.isEmpty {
+                VStack(spacing: DesignSystem.Spacing.xxxs) {
+                    ForEach(lookupResults, id: \.id) { card in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(card.cardName)
+                                    .font(DesignSystem.Typography.labelLarge)
+                                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                                    .lineLimit(1)
+                                Text(card.setName)
+                                    .font(DesignSystem.Typography.captionSmall)
+                                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Text(card.estimatedValue.asCurrency)
+                                .font(DesignSystem.Typography.labelLarge.monospacedDigit())
+                                .foregroundStyle(DesignSystem.Colors.success)
+                        }
+                        .padding(.vertical, DesignSystem.Spacing.xs)
+                        .padding(.horizontal, DesignSystem.Spacing.sm)
+                    }
+                }
+                .background(DesignSystem.Colors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            } else if !lookupSearchText.isEmpty {
+                Text("No matching cards in inventory")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    // MARK: - Sales Counter
+
+    private var salesCounter: some View {
+        HStack(spacing: DesignSystem.Spacing.md) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxxs) {
+                Text("SESSION TOTAL")
+                    .font(DesignSystem.Typography.captionBold)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                Text("\(totalRevenue.asCurrency) from \(cardsSold) sales")
+                    .font(DesignSystem.Typography.labelLarge.monospacedDigit())
+                    .foregroundStyle(DesignSystem.Colors.success)
+            }
+
+            Spacer()
+
+            Button {
+                showQuickSale = true
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.xxxs) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Sell Another")
+                }
+                .font(DesignSystem.Typography.label)
+                .foregroundStyle(DesignSystem.Colors.backgroundPrimary)
+                .padding(.horizontal, DesignSystem.Spacing.sm)
+                .padding(.vertical, DesignSystem.Spacing.xs)
+                .background(DesignSystem.Colors.success)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    // MARK: - Goal Progress
+
+    private var goalProgress: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            HStack {
+                Text("REVENUE GOAL")
+                    .font(DesignSystem.Typography.captionBold)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                Spacer()
+
+                Text("\(totalRevenue.asCurrency) / \(revenueGoal.asCurrency)")
+                    .font(DesignSystem.Typography.caption.monospacedDigit())
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(DesignSystem.Colors.backgroundTertiary)
+                        .frame(height: 8)
+
+                    let progress = min(totalRevenue / revenueGoal, 1.0)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(progress >= 1.0 ? DesignSystem.Colors.success : DesignSystem.Colors.thunderYellow)
+                        .frame(width: geo.size.width * progress, height: 8)
+                }
+            }
+            .frame(height: 8)
+
+            if totalRevenue >= revenueGoal {
+                HStack(spacing: DesignSystem.Spacing.xxxs) {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                    Text("Goal reached!")
+                }
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.success)
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
     }
 
     // MARK: - Quick Actions

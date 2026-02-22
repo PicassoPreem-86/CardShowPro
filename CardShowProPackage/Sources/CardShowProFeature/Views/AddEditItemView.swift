@@ -9,6 +9,9 @@ struct AddEditItemView: View {
     // Edit mode - if provided, we're editing; if nil, we're adding
     let cardToEdit: InventoryCard?
 
+    // Duplicate detection query
+    @Query private var allCards: [InventoryCard]
+
     // Form state
     @State private var selectedCategory: CardCategory = .rawSingles
     @State private var cardName = ""
@@ -22,6 +25,13 @@ struct AddEditItemView: View {
     @State private var selectedImage: UIImage?
     @State private var showImagePicker = false
     @State private var imagePickerSource: ImagePickerSource = .camera
+
+    // Variant
+    @State private var selectedVariant: InventoryCardVariant = .normal
+
+    // Tags & Storage
+    @State private var tagsInput = ""
+    @State private var storageLocation = ""
 
     // Acquisition
     @State private var acquisitionSource: AcquisitionSource = .localPickup
@@ -46,10 +56,43 @@ struct AddEditItemView: View {
         (Double(marketValue) ?? 0) > 0
     }
 
+    private var duplicateCard: InventoryCard? {
+        guard !isEditMode else { return nil }
+        let trimmedName = cardName.trimmingCharacters(in: .whitespaces).lowercased()
+        let trimmedSet = setName.trimmingCharacters(in: .whitespaces).lowercased()
+        let trimmedNumber = cardNumber.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !trimmedName.isEmpty else { return nil }
+
+        return allCards.first { card in
+            card.cardName.lowercased() == trimmedName &&
+            (trimmedSet.isEmpty || card.setName.lowercased() == trimmedSet) &&
+            (trimmedNumber.isEmpty || card.cardNumber.lowercased() == trimmedNumber)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                // Photo Section (MOVED TO TOP)
+                // Duplicate warning
+                if let dupe = duplicateCard {
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Similar card already in inventory")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.orange)
+                                Text("\(dupe.cardName) - \(dupe.setName)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                // Photo Section
                 Section {
                     if let image = selectedImage {
                         // Show selected image
@@ -114,7 +157,7 @@ struct AddEditItemView: View {
                         .font(.caption)
                 }
 
-                // Card Details Section (MOVED TO SECOND)
+                // Card Details Section
                 Section {
                     TextField("Card Name", text: $cardName)
                         .autocorrectionDisabled()
@@ -132,8 +175,8 @@ struct AddEditItemView: View {
                         .autocorrectionDisabled()
 
                     Picker("Condition", selection: $condition) {
-                        ForEach(CardCondition.allCases, id: \.self) { condition in
-                            Text(condition.rawValue).tag(condition)
+                        ForEach(CardCondition.allCases, id: \.self) { cond in
+                            Text(cond.rawValue).tag(cond)
                         }
                     }
                 } header: {
@@ -145,7 +188,41 @@ struct AddEditItemView: View {
                     }
                 }
 
-                // Category Section (MOVED TO THIRD)
+                // Variant Section
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(InventoryCardVariant.allCases, id: \.self) { variant in
+                                Button {
+                                    selectedVariant = variant
+                                } label: {
+                                    Text(variant.displayName)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            selectedVariant == variant
+                                                ? Color.cyan
+                                                : Color(.systemGray5)
+                                        )
+                                        .foregroundStyle(
+                                            selectedVariant == variant
+                                                ? .white
+                                                : .primary
+                                        )
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } header: {
+                    Text("VARIANT")
+                }
+
+                // Category Section
                 Section {
                     Picker("Category", selection: $selectedCategory) {
                         ForEach(CardCategory.allCases, id: \.self) { category in
@@ -162,7 +239,7 @@ struct AddEditItemView: View {
                     Text("CATEGORY")
                 }
 
-                // Pricing Section (MOVED TO FOURTH)
+                // Pricing Section
                 Section {
                     HStack {
                         Text("Purchase Price")
@@ -251,7 +328,29 @@ struct AddEditItemView: View {
                     }
                 }
 
-                // Notes Section (MOVED TO FIFTH)
+                // Tags Section
+                Section {
+                    TextField("e.g. vintage, investment, trade", text: $tagsInput)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("TAGS")
+                } footer: {
+                    Text("Separate tags with commas for organization")
+                        .font(.caption)
+                }
+
+                // Storage Location Section
+                Section {
+                    TextField("e.g. Binder A, Box 3, Top Loader Sleeve", text: $storageLocation)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("STORAGE LOCATION")
+                } footer: {
+                    Text("Where this card is physically stored")
+                        .font(.caption)
+                }
+
+                // Notes Section
                 Section {
                     TextField("Optional notes about this card...", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
@@ -311,6 +410,15 @@ struct AddEditItemView: View {
         condition = card.cardCondition
         selectedCategory = card.cardCategory
 
+        // Variant
+        if let variant = card.variantType {
+            selectedVariant = variant
+        }
+
+        // Tags & Storage
+        tagsInput = card.tags ?? ""
+        storageLocation = card.storageLocation ?? ""
+
         // Acquisition source
         if let source = card.cardAcquisitionSource {
             acquisitionSource = source
@@ -340,6 +448,8 @@ struct AddEditItemView: View {
         let trimmedName = cardName.trimmingCharacters(in: .whitespaces)
         let trimmedSet = setName.trimmingCharacters(in: .whitespaces)
         let trimmedNumber = cardNumber.trimmingCharacters(in: .whitespaces)
+        let trimmedTags = tagsInput.trimmingCharacters(in: .whitespaces)
+        let trimmedStorage = storageLocation.trimmingCharacters(in: .whitespaces)
 
         if let existingCard = cardToEdit {
             // Edit existing card
@@ -353,6 +463,9 @@ struct AddEditItemView: View {
             existingCard.notes = notes
             existingCard.quantity = quantity
             existingCard.acquisitionSource = acquisitionSource.rawValue
+            existingCard.variant = selectedVariant == .normal ? nil : selectedVariant.rawValue
+            existingCard.tags = trimmedTags.isEmpty ? nil : trimmedTags
+            existingCard.storageLocation = trimmedStorage.isEmpty ? nil : trimmedStorage
             if let image = selectedImage {
                 existingCard.imageData = image.pngData()
             }
@@ -385,6 +498,13 @@ struct AddEditItemView: View {
                 quantity: quantity,
                 acquisitionSource: acquisitionSource.rawValue
             )
+
+            // Variant
+            newCard.variant = selectedVariant == .normal ? nil : selectedVariant.rawValue
+
+            // Tags & Storage
+            newCard.tags = trimmedTags.isEmpty ? nil : trimmedTags
+            newCard.storageLocation = trimmedStorage.isEmpty ? nil : trimmedStorage
 
             // Grading fields
             if selectedCategory == .graded {

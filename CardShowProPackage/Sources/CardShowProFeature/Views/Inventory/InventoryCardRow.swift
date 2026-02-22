@@ -52,6 +52,11 @@ struct InventoryCardRow: View {
                     .foregroundStyle(category.color)
                     .clipShape(Capsule())
 
+                    // Variant Badge
+                    if let variant = card.variantType, variant != .normal {
+                        VariantBadge(variant: variant)
+                    }
+
                     // Status Badge (only for non-inStock)
                     if card.cardStatus != .inStock {
                         StatusBadge(status: card.cardStatus)
@@ -126,6 +131,8 @@ struct StatusBadge: View {
         case .listed: return DesignSystem.Colors.electricBlue
         case .sold: return DesignSystem.Colors.success
         case .shipped: return DesignSystem.Colors.textSecondary
+        case .returned: return DesignSystem.Colors.error
+        case .disputed: return DesignSystem.Colors.warning
         }
     }
 
@@ -135,6 +142,8 @@ struct StatusBadge: View {
         case .listed: return "tag.fill"
         case .sold: return "checkmark.circle.fill"
         case .shipped: return "paperplane.fill"
+        case .returned: return "arrow.uturn.backward.circle.fill"
+        case .disputed: return "exclamationmark.triangle.fill"
         }
     }
 
@@ -143,6 +152,38 @@ struct StatusBadge: View {
             Image(systemName: badgeIcon)
                 .font(.system(size: 9))
             Text(status.rawValue)
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(badgeColor.opacity(0.15))
+        .foregroundStyle(badgeColor)
+        .clipShape(Capsule())
+    }
+}
+
+// MARK: - Variant Badge
+
+struct VariantBadge: View {
+    let variant: InventoryCardVariant
+
+    private var badgeColor: Color {
+        switch variant {
+        case .normal: return DesignSystem.Colors.textSecondary
+        case .holofoil, .reverseHolofoil: return .cyan
+        case .firstEdition: return DesignSystem.Colors.thunderYellow
+        case .unlimited: return DesignSystem.Colors.textSecondary
+        case .secretRare, .hyperRare, .goldRare: return DesignSystem.Colors.thunderYellow
+        case .fullArt, .altArt, .specialArtRare: return .purple
+        case .illustrationRare: return .pink
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 8))
+            Text(variant.displayName)
                 .font(.system(size: 10, weight: .semibold))
         }
         .padding(.horizontal, 6)

@@ -8,7 +8,7 @@
 // ==========================================
 PRODUCT_NAME = CardShowPro
 PRODUCT_DISPLAY_NAME = CardShow Pro
-PRODUCT_BUNDLE_IDENTIFIER = com.cardshowpro.app
+PRODUCT_BUNDLE_IDENTIFIER = com.procircuitrc.app
 MARKETING_VERSION = 1.0.0
 CURRENT_PROJECT_VERSION = 1
 

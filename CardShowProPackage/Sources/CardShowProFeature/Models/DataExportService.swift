@@ -4,18 +4,39 @@ import Foundation
 @MainActor
 public enum DataExportService {
 
-    // MARK: - Inventory CSV
+    // MARK: - ISO 8601 Formatter
+
+    private static let iso8601Formatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    // MARK: - Inventory CSV (All Cards)
 
     /// Export inventory cards as a CSV string with header row.
     public static func exportInventoryCSV(cards: [InventoryCard]) -> String {
+        exportSelectedInventoryCSV(cards: cards)
+    }
+
+    // MARK: - Inventory CSV (Selected Cards)
+
+    /// Export selected inventory cards as a CSV string with all fields.
+    public static func exportSelectedInventoryCSV(cards: [InventoryCard]) -> String {
         var lines: [String] = []
 
         lines.append(
             csvRow([
                 "Card Name", "Set", "Card Number", "Category", "Condition",
-                "Status", "Purchase Cost", "Market Value", "Profit", "ROI%",
+                "Status", "Variant", "Purchase Cost", "Market Value", "Profit", "ROI%",
                 "Acquisition Source", "Acquisition Date", "Date Added",
-                "Platform", "Grade", "Grading Service", "Notes"
+                "Platform", "Grade", "Grading Service", "Grading Cost",
+                "Tags", "Storage Location", "Quantity",
+                "Listing Price", "Listed Date", "Listing URL",
+                "Sold Price", "Sold Date",
+                "Tracking Number", "Carrier", "Shipped Date",
+                "Return Reason", "Refund Amount", "Refund Date",
+                "Days In Inventory", "Notes"
             ])
         )
 
@@ -27,16 +48,33 @@ public enum DataExportService {
                 card.category,
                 card.condition,
                 card.status,
+                card.variant ?? "",
                 formatOptionalCurrency(card.purchaseCost),
                 formatCurrency(card.estimatedValue),
                 formatCurrency(card.profit),
                 card.purchaseCost != nil ? String(format: "%.1f", card.roi) : "",
                 card.acquisitionSource ?? "",
-                formatOptionalDate(card.acquisitionDate),
-                formatDate(card.timestamp),
+                formatOptionalDateISO(card.acquisitionDate),
+                formatDateISO(card.timestamp),
                 card.platform ?? "",
                 card.grade ?? "",
                 card.gradingService ?? "",
+                formatOptionalCurrency(card.gradingCost),
+                card.tags ?? "",
+                card.storageLocation ?? "",
+                String(card.quantity),
+                formatOptionalCurrency(card.listingPrice),
+                formatOptionalDateISO(card.listedDate),
+                card.listingUrl ?? "",
+                formatOptionalCurrency(card.soldPrice),
+                formatOptionalDateISO(card.soldDate),
+                card.trackingNumber ?? "",
+                card.carrier ?? "",
+                formatOptionalDateISO(card.shippedDate),
+                card.returnReason ?? "",
+                formatOptionalCurrency(card.refundAmount),
+                formatOptionalDateISO(card.refundDate),
+                String(card.daysInInventory),
                 card.notes
             ]
             lines.append(csvRow(row))
@@ -55,13 +93,16 @@ public enum DataExportService {
             csvRow([
                 "Date", "Type", "Card Name", "Set", "Amount",
                 "Platform Fees", "Shipping", "Net Amount", "Profit",
-                "Platform", "Contact", "Event", "Notes"
+                "Platform", "Contact", "Event",
+                "Payment Method", "Tax Amount", "Buyer Name", "Tracking Number",
+                "Refund Amount", "Refund Date",
+                "Notes"
             ])
         )
 
         for txn in transactions {
             let row: [String] = [
-                formatDate(txn.date),
+                formatDateISO(txn.date),
                 txn.type,
                 txn.cardName,
                 txn.cardSetName,
@@ -73,6 +114,12 @@ public enum DataExportService {
                 txn.platform ?? "",
                 txn.contactName ?? "",
                 txn.eventName ?? "",
+                txn.paymentMethod ?? "",
+                formatCurrency(txn.taxAmount),
+                txn.buyerName ?? "",
+                txn.trackingNumber ?? "",
+                formatOptionalCurrency(txn.refundAmount),
+                formatOptionalDateISO(txn.refundDate),
                 txn.notes
             ]
             lines.append(csvRow(row))
@@ -165,13 +212,13 @@ public enum DataExportService {
         return String(format: "%.2f", value)
     }
 
-    private static func formatDate(_ date: Date) -> String {
-        date.formatted(date: .abbreviated, time: .omitted)
+    private static func formatDateISO(_ date: Date) -> String {
+        iso8601Formatter.string(from: date)
     }
 
-    private static func formatOptionalDate(_ date: Date?) -> String {
+    private static func formatOptionalDateISO(_ date: Date?) -> String {
         guard let date else { return "" }
-        return date.formatted(date: .abbreviated, time: .omitted)
+        return iso8601Formatter.string(from: date)
     }
 
     /// Format as USD currency string for the P&L report.

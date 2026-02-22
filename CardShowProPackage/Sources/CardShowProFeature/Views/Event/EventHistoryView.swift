@@ -8,57 +8,112 @@ import SwiftData
 struct EventHistoryView: View {
     @Query(sort: \Event.date, order: .reverse) private var events: [Event]
     @Query private var allTransactions: [Transaction]
+    @Environment(\.modelContext) private var modelContext
 
     @State private var selectedEvent: Event?
+    @State private var showCreateEvent = false
+    @State private var editingEvent: Event?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: DesignSystem.Spacing.md) {
-                if events.isEmpty {
-                    emptyState
-                } else {
-                    // Active events
-                    let activeEvents = events.filter { $0.isActive }
-                    if !activeEvents.isEmpty {
-                        sectionHeader("ACTIVE")
-                        ForEach(activeEvents, id: \.id) { event in
-                            EventHistoryRow(
-                                event: event,
-                                netProfit: computeNetProfit(for: event),
-                                salesCount: computeSalesCount(for: event),
-                                isActive: true
-                            )
-                            .onTapGesture {
-                                selectedEvent = event
+        ZStack(alignment: .bottomTrailing) {
+            ScrollView {
+                VStack(spacing: DesignSystem.Spacing.md) {
+                    if events.isEmpty {
+                        emptyState
+                    } else {
+                        // Active events
+                        let activeEvents = events.filter { $0.isActive }
+                        if !activeEvents.isEmpty {
+                            sectionHeader("ACTIVE")
+                            ForEach(activeEvents, id: \.id) { event in
+                                EventHistoryRow(
+                                    event: event,
+                                    netProfit: computeNetProfit(for: event),
+                                    salesCount: computeSalesCount(for: event),
+                                    isActive: true
+                                )
+                                .onTapGesture {
+                                    selectedEvent = event
+                                }
+                                .contextMenu {
+                                    Button {
+                                        editingEvent = event
+                                    } label: {
+                                        Label("Edit Event", systemImage: "pencil")
+                                    }
+                                }
                             }
                         }
-                    }
 
-                    // Past events
-                    let pastEvents = events.filter { !$0.isActive }
-                    if !pastEvents.isEmpty {
-                        sectionHeader("PAST EVENTS")
-                        ForEach(pastEvents, id: \.id) { event in
-                            EventHistoryRow(
-                                event: event,
-                                netProfit: computeNetProfit(for: event),
-                                salesCount: computeSalesCount(for: event),
-                                isActive: false
-                            )
-                            .onTapGesture {
-                                selectedEvent = event
+                        // Past events
+                        let pastEvents = events.filter { !$0.isActive }
+                        if !pastEvents.isEmpty {
+                            sectionHeader("PAST EVENTS")
+                            ForEach(pastEvents, id: \.id) { event in
+                                EventHistoryRow(
+                                    event: event,
+                                    netProfit: computeNetProfit(for: event),
+                                    salesCount: computeSalesCount(for: event),
+                                    isActive: false
+                                )
+                                .onTapGesture {
+                                    selectedEvent = event
+                                }
+                                .contextMenu {
+                                    Button {
+                                        editingEvent = event
+                                    } label: {
+                                        Label("Edit Event", systemImage: "pencil")
+                                    }
+                                }
                             }
                         }
                     }
                 }
+                .padding(DesignSystem.Spacing.md)
             }
-            .padding(DesignSystem.Spacing.md)
+            .background(DesignSystem.Colors.backgroundPrimary)
+
+            // FAB - Create Event
+            Button {
+                showCreateEvent = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(DesignSystem.Colors.backgroundPrimary)
+                    .frame(width: 60, height: 60)
+                    .background(DesignSystem.Colors.thunderYellow)
+                    .clipShape(Circle())
+                    .shadow(
+                        color: DesignSystem.Shadows.level4.color,
+                        radius: DesignSystem.Shadows.level4.radius,
+                        x: DesignSystem.Shadows.level4.x,
+                        y: DesignSystem.Shadows.level4.y
+                    )
+            }
+            .padding(DesignSystem.Spacing.lg)
+            .accessibilityLabel("Create new event")
         }
-        .background(DesignSystem.Colors.backgroundPrimary)
         .navigationTitle("Event History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showCreateEvent = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
         .sheet(item: $selectedEvent) { event in
             EndEventReportView(event: event)
+        }
+        .sheet(isPresented: $showCreateEvent) {
+            CreateEventView()
+        }
+        .sheet(item: $editingEvent) { event in
+            EditEventSheet(event: event)
         }
     }
 
@@ -201,6 +256,160 @@ private struct EventHistoryRow: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(event.name) at \(event.venue), \(netProfit >= 0 ? "profit" : "loss") \(netProfit.asCurrency)")
+    }
+}
+
+// MARK: - Edit Event Sheet
+
+private struct EditEventSheet: View {
+    @Bindable var event: Event
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var name: String = ""
+    @State private var venue: String = ""
+    @State private var tableCostText: String = ""
+    @State private var travelCostText: String = ""
+    @State private var notes: String = ""
+    @State private var showSaveError = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: DesignSystem.Spacing.lg) {
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                        Text("EVENT NAME")
+                            .font(DesignSystem.Typography.captionBold)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                        TextField("Event name", text: $name)
+                            .font(DesignSystem.Typography.body)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            .padding(DesignSystem.Spacing.sm)
+                            .background(DesignSystem.Colors.backgroundTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                    }
+                    .padding(DesignSystem.Spacing.md)
+                    .background(DesignSystem.Colors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                        Text("VENUE")
+                            .font(DesignSystem.Typography.captionBold)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                        TextField("Venue", text: $venue)
+                            .font(DesignSystem.Typography.body)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            .padding(DesignSystem.Spacing.sm)
+                            .background(DesignSystem.Colors.backgroundTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                    }
+                    .padding(DesignSystem.Spacing.md)
+                    .background(DesignSystem.Colors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                        Text("COSTS")
+                            .font(DesignSystem.Typography.captionBold)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                        HStack(spacing: DesignSystem.Spacing.sm) {
+                            Image(systemName: "tablecells")
+                                .foregroundStyle(DesignSystem.Colors.textTertiary)
+                            Text("$")
+                                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                            TextField("Table cost", text: $tableCostText)
+                                .keyboardType(.decimalPad)
+                                .font(DesignSystem.Typography.body)
+                                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        }
+                        .padding(DesignSystem.Spacing.sm)
+                        .background(DesignSystem.Colors.backgroundTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+
+                        HStack(spacing: DesignSystem.Spacing.sm) {
+                            Image(systemName: "car.fill")
+                                .foregroundStyle(DesignSystem.Colors.textTertiary)
+                            Text("$")
+                                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                            TextField("Travel cost", text: $travelCostText)
+                                .keyboardType(.decimalPad)
+                                .font(DesignSystem.Typography.body)
+                                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        }
+                        .padding(DesignSystem.Spacing.sm)
+                        .background(DesignSystem.Colors.backgroundTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                    }
+                    .padding(DesignSystem.Spacing.md)
+                    .background(DesignSystem.Colors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                        Text("NOTES")
+                            .font(DesignSystem.Typography.captionBold)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                        TextEditor(text: $notes)
+                            .font(DesignSystem.Typography.body)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 80)
+                            .padding(DesignSystem.Spacing.sm)
+                            .background(DesignSystem.Colors.backgroundTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                    }
+                    .padding(DesignSystem.Spacing.md)
+                    .background(DesignSystem.Colors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+                }
+                .padding(DesignSystem.Spacing.md)
+            }
+            .background(DesignSystem.Colors.backgroundPrimary)
+            .navigationTitle("Edit Event")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Save") { saveChanges() }
+                        .fontWeight(.semibold)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .onAppear {
+                name = event.name
+                venue = event.venue
+                tableCostText = event.tableCost > 0 ? String(format: "%.2f", event.tableCost) : ""
+                travelCostText = event.travelCost > 0 ? String(format: "%.2f", event.travelCost) : ""
+                notes = event.notes
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Could not save event changes. Please try again.")
+            }
+        }
+    }
+
+    private func saveChanges() {
+        event.name = name.trimmingCharacters(in: .whitespaces)
+        event.venue = venue.trimmingCharacters(in: .whitespaces)
+        event.tableCost = Double(tableCostText) ?? 0
+        event.travelCost = Double(travelCostText) ?? 0
+        event.notes = notes
+        do {
+            try modelContext.save()
+            dismiss()
+        } catch {
+            #if DEBUG
+            print("Failed to save event edits: \(error)")
+            #endif
+            showSaveError = true
+        }
     }
 }
 

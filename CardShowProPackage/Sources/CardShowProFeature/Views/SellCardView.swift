@@ -11,17 +11,41 @@ struct SellCardView: View {
     @State private var buyerName: String = ""
     @State private var eventName: String = ""
     @State private var selectedPlatform: SellPlatform = .ebay
+    @State private var selectedPaymentMethod: PaymentMethod = .cash
     @State private var showSaveError = false
+    @State private var platformPreferences = UserPlatformPreferences()
+    @State private var showContactSuggestions = false
+    @Query(sort: \Contact.name) private var allContacts: [Contact]
     @FocusState private var focusedField: Field?
 
     enum Field: Hashable {
         case salePrice, shipping, buyer, event
     }
 
+    /// Contacts matching the buyer name input
+    private var matchingContacts: [Contact] {
+        guard !buyerName.isEmpty else { return [] }
+        let query = buyerName.lowercased()
+        return allContacts.filter { $0.name.lowercased().contains(query) }.prefix(5).map { $0 }
+    }
+
+    /// Whether this buyer is a repeat customer (has previous transactions)
+    private var isRepeatCustomer: Bool {
+        guard !buyerName.isEmpty else { return false }
+        let query = buyerName.lowercased()
+        return allContacts.contains { contact in
+            contact.name.lowercased() == query && contact.contactTypeEnum == .customer
+        }
+    }
+
     enum SellPlatform: String, CaseIterable, Identifiable {
         case ebay = "eBay"
         case tcgplayer = "TCGPlayer"
         case facebook = "Facebook Marketplace"
+        case whatnot = "Whatnot"
+        case mercari = "Mercari"
+        case heritageAuctions = "Heritage Auctions"
+        case cardmarket = "Cardmarket"
         case localCash = "Local/Cash"
         case event = "Event"
         case other = "Other"
@@ -33,6 +57,10 @@ struct SellCardView: View {
             case .ebay: return "bag.fill"
             case .tcgplayer: return "creditcard.fill"
             case .facebook: return "person.2.fill"
+            case .whatnot: return "video.fill"
+            case .mercari: return "shippingbox.fill"
+            case .heritageAuctions: return "building.columns.fill"
+            case .cardmarket: return "globe.europe.africa.fill"
             case .localCash: return "banknote.fill"
             case .event: return "ticket.fill"
             case .other: return "ellipsis.circle.fill"
@@ -62,6 +90,34 @@ struct SellCardView: View {
                     paymentFeeFixed: 0.40,
                     description: "Facebook Checkout"
                 )
+            case .whatnot:
+                return PlatformFees(
+                    platformFeePercentage: 0.08,
+                    paymentFeePercentage: 0.029,
+                    paymentFeeFixed: 0.30,
+                    description: "Whatnot Live Sales"
+                )
+            case .mercari:
+                return PlatformFees(
+                    platformFeePercentage: 0.10,
+                    paymentFeePercentage: 0.00,
+                    paymentFeeFixed: 0.00,
+                    description: "Mercari Flat Fee"
+                )
+            case .heritageAuctions:
+                return PlatformFees(
+                    platformFeePercentage: 0.15,
+                    paymentFeePercentage: 0.00,
+                    paymentFeeFixed: 0.00,
+                    description: "Heritage Seller Fee (approx)"
+                )
+            case .cardmarket:
+                return PlatformFees(
+                    platformFeePercentage: 0.05,
+                    paymentFeePercentage: 0.029,
+                    paymentFeeFixed: 0.35,
+                    description: "Cardmarket EU Marketplace"
+                )
             case .localCash, .event:
                 return PlatformFees(
                     platformFeePercentage: 0.00,
@@ -82,6 +138,10 @@ struct SellCardView: View {
 
     // MARK: - Computed Fee Calculations
 
+    private var effectiveFees: PlatformFees {
+        platformPreferences.getEffectiveFees(for: selectedPlatform.rawValue)
+    }
+
     private var salePriceValue: Double {
         Double(salePrice) ?? 0
     }
@@ -91,13 +151,11 @@ struct SellCardView: View {
     }
 
     private var platformFeeAmount: Double {
-        let fees = selectedPlatform.fees
-        return salePriceValue * fees.platformFeePercentage
+        salePriceValue * effectiveFees.platformFeePercentage
     }
 
     private var paymentFeeAmount: Double {
-        let fees = selectedPlatform.fees
-        return (salePriceValue * fees.paymentFeePercentage) + fees.paymentFeeFixed
+        (salePriceValue * effectiveFees.paymentFeePercentage) + effectiveFees.paymentFeeFixed
     }
 
     private var totalFees: Double {
@@ -135,6 +193,7 @@ struct SellCardView: View {
                     cardHeader
                     salePriceSection
                     platformPicker
+                    paymentMethodPicker
                     shippingSection
                     optionalFieldsSection
                     summarySection
@@ -156,6 +215,10 @@ struct SellCardView: View {
             }
             .onAppear {
                 salePrice = String(format: "%.2f", card.marketValue)
+                if let defaultPlatform = platformPreferences.defaultPlatform,
+                   let platform = SellPlatform(rawValue: defaultPlatform) {
+                    selectedPlatform = platform
+                }
                 if selectedPlatform == .localCash || selectedPlatform == .event {
                     shippingCost = "0"
                 }
@@ -293,9 +356,57 @@ struct SellCardView: View {
             }
 
             if totalFees > 0 {
-                Text(selectedPlatform.fees.description)
+                Text(effectiveFees.description)
                     .font(DesignSystem.Typography.captionSmall)
                     .foregroundStyle(DesignSystem.Colors.textTertiary)
+            }
+        }
+    }
+
+    // MARK: - Payment Method Picker
+
+    private var paymentMethodPicker: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
+            Text("PAYMENT METHOD")
+                .font(DesignSystem.Typography.captionBold)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignSystem.Spacing.xxs) {
+                    ForEach(PaymentMethod.allCases, id: \.rawValue) { method in
+                        Button {
+                            withAnimation(.spring(response: 0.3)) {
+                                selectedPaymentMethod = method
+                            }
+                        } label: {
+                            Text(method.displayName)
+                                .font(DesignSystem.Typography.captionBold)
+                                .padding(.horizontal, DesignSystem.Spacing.xs)
+                                .padding(.vertical, DesignSystem.Spacing.xxs)
+                                .background(
+                                    selectedPaymentMethod == method
+                                        ? DesignSystem.Colors.electricBlue.opacity(0.2)
+                                        : DesignSystem.Colors.backgroundTertiary
+                                )
+                                .foregroundStyle(
+                                    selectedPaymentMethod == method
+                                        ? DesignSystem.Colors.electricBlue
+                                        : DesignSystem.Colors.textSecondary
+                                )
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(
+                                            selectedPaymentMethod == method
+                                                ? DesignSystem.Colors.electricBlue.opacity(0.5)
+                                                : Color.clear,
+                                            lineWidth: 1
+                                        )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }
@@ -340,17 +451,75 @@ struct SellCardView: View {
                 .foregroundStyle(DesignSystem.Colors.textSecondary)
 
             VStack(spacing: DesignSystem.Spacing.xs) {
-                HStack(spacing: DesignSystem.Spacing.xs) {
-                    Image(systemName: "person.fill")
-                        .foregroundStyle(DesignSystem.Colors.textTertiary)
-                        .frame(width: 24)
-                    TextField("Buyer Name", text: $buyerName)
-                        .font(DesignSystem.Typography.body)
-                        .focused($focusedField, equals: .buyer)
+                VStack(spacing: 0) {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
+                        Image(systemName: "person.fill")
+                            .foregroundStyle(DesignSystem.Colors.textTertiary)
+                            .frame(width: 24)
+                        TextField("Buyer Name", text: $buyerName)
+                            .font(DesignSystem.Typography.body)
+                            .focused($focusedField, equals: .buyer)
+                            .onChange(of: buyerName) {
+                                showContactSuggestions = !matchingContacts.isEmpty && focusedField == .buyer
+                            }
+
+                        if isRepeatCustomer {
+                            HStack(spacing: 2) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 9))
+                                Text("Repeat")
+                                    .font(.system(size: 9, weight: .semibold))
+                            }
+                            .foregroundStyle(DesignSystem.Colors.success)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(DesignSystem.Colors.success.opacity(0.15))
+                            .clipShape(Capsule())
+                        }
+                    }
+                    .padding(DesignSystem.Spacing.sm)
+                    .background(DesignSystem.Colors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+
+                    // Contact autocomplete suggestions
+                    if showContactSuggestions && focusedField == .buyer {
+                        VStack(spacing: 0) {
+                            ForEach(matchingContacts) { contact in
+                                Button {
+                                    buyerName = contact.name
+                                    showContactSuggestions = false
+                                    focusedField = nil
+                                } label: {
+                                    HStack(spacing: DesignSystem.Spacing.xs) {
+                                        ContactAvatarView(
+                                            initials: contact.initials,
+                                            size: CGSize(width: 28, height: 28),
+                                            color: contact.contactTypeEnum.color
+                                        )
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(contact.name)
+                                                .font(DesignSystem.Typography.label)
+                                                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                                            if let subtitle = contact.subtitle {
+                                                Text(subtitle)
+                                                    .font(DesignSystem.Typography.captionSmall)
+                                                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                                                    .lineLimit(1)
+                                            }
+                                        }
+                                        Spacer()
+                                        ContactTypeBadge(type: contact.contactTypeEnum)
+                                    }
+                                    .padding(.horizontal, DesignSystem.Spacing.sm)
+                                    .padding(.vertical, DesignSystem.Spacing.xs)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .background(DesignSystem.Colors.backgroundTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm))
+                    }
                 }
-                .padding(DesignSystem.Spacing.sm)
-                .background(DesignSystem.Colors.backgroundSecondary)
-                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
 
                 HStack(spacing: DesignSystem.Spacing.xs) {
                     Image(systemName: "ticket.fill")
@@ -468,6 +637,17 @@ struct SellCardView: View {
             contactName: buyerName.isEmpty ? nil : buyerName,
             eventName: eventName.isEmpty ? nil : eventName
         )
+        transaction.paymentMethod = selectedPaymentMethod.rawValue
+        transaction.buyerName = buyerName.isEmpty ? nil : buyerName
+
+        // Link to existing contact if buyer name matches
+        if !buyerName.isEmpty {
+            let query = buyerName.lowercased()
+            if let matchedContact = allContacts.first(where: { $0.name.lowercased() == query }) {
+                transaction.contactId = matchedContact.id
+                matchedContact.lastContactedAt = Date()
+            }
+        }
 
         modelContext.insert(transaction)
 
@@ -475,6 +655,9 @@ struct SellCardView: View {
         card.soldPrice = salePriceValue
         card.soldDate = Date()
         card.platform = selectedPlatform.rawValue
+
+        // Remember platform preference
+        platformPreferences.defaultPlatform = selectedPlatform.rawValue
 
         do {
             try modelContext.save()

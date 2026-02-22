@@ -40,6 +40,12 @@ struct AnalyticsView: View {
                             heroMetricsSection
                             timeRangeSelector
                             portfolioChartSection
+                            cumulativeProfitChartSection
+                            salesVelocityChartSection
+                            platformBreakdownSection
+                            inventoryAgeSection
+                            periodComparisonSection
+                            sellThroughGaugeSection
                             topPerformersSection
                             categoryBreakdownSection
                             quickStatsGrid
@@ -393,6 +399,436 @@ struct AnalyticsView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Cumulative Profit Chart
+
+    private var cumulativeProfitChartSection: some View {
+        let profitTimeline = analyticsService.cumulativeProfitTimeline(transactions: transactions)
+
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            AnalyticsSectionHeader(title: "Realized Profit", subtitle: "Cumulative profit from sales")
+
+            if profitTimeline.isEmpty {
+                Text("Complete sales to see profit trend")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 160)
+            } else {
+                Chart(profitTimeline) { point in
+                    LineMark(
+                        x: .value("Date", point.date),
+                        y: .value("Profit", point.value)
+                    )
+                    .foregroundStyle(DesignSystem.Colors.success)
+                    .interpolationMethod(.catmullRom)
+
+                    AreaMark(
+                        x: .value("Date", point.date),
+                        y: .value("Profit", point.value)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                DesignSystem.Colors.success.opacity(0.3),
+                                DesignSystem.Colors.success.opacity(0.05)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .interpolationMethod(.catmullRom)
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisValueLabel {
+                            if let val = value.as(Double.self) {
+                                Text(formatCompactCurrency(val))
+                                    .font(DesignSystem.Typography.captionSmall)
+                                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                            }
+                        }
+                        AxisGridLine()
+                            .foregroundStyle(DesignSystem.Colors.borderPrimary)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                                    .font(DesignSystem.Typography.captionSmall)
+                                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 180)
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    // MARK: - Sales Velocity Chart
+
+    private var salesVelocityChartSection: some View {
+        let weeklyData = analyticsService.weeklySalesCounts(transactions: transactions, weeks: 12)
+
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            AnalyticsSectionHeader(title: "Sales Velocity", subtitle: "Cards sold per week")
+
+            if weeklyData.isEmpty || weeklyData.allSatisfy({ $0.count == 0 }) {
+                Text("Complete sales to see velocity")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 160)
+            } else {
+                Chart(Array(weeklyData.enumerated()), id: \.offset) { _, item in
+                    BarMark(
+                        x: .value("Week", item.weekLabel),
+                        y: .value("Count", item.count)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [DesignSystem.Colors.electricBlue, DesignSystem.Colors.cyan],
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+                    .cornerRadius(4)
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisValueLabel {
+                            if let val = value.as(Int.self) {
+                                Text("\(val)")
+                                    .font(DesignSystem.Typography.captionSmall)
+                                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                            }
+                        }
+                        AxisGridLine()
+                            .foregroundStyle(DesignSystem.Colors.borderPrimary)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let label = value.as(String.self) {
+                                Text(label)
+                                    .font(DesignSystem.Typography.captionSmall)
+                                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                                    .rotationEffect(.degrees(-45))
+                            }
+                        }
+                    }
+                }
+                .frame(height: 180)
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    // MARK: - Platform Breakdown
+
+    private var platformBreakdownSection: some View {
+        let platforms = analyticsService.platformProfitability(transactions: transactions)
+
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            AnalyticsSectionHeader(title: "Platform Breakdown", subtitle: "Net profit by platform")
+
+            if platforms.isEmpty {
+                Text("Complete sales to see platform data")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 100)
+            } else {
+                // Horizontal bar chart
+                Chart(platforms) { platform in
+                    BarMark(
+                        x: .value("Profit", platform.netProfit),
+                        y: .value("Platform", platform.platform)
+                    )
+                    .foregroundStyle(platform.netProfit >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error)
+                    .cornerRadius(4)
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let val = value.as(Double.self) {
+                                Text(formatCompactCurrency(val))
+                                    .font(DesignSystem.Typography.captionSmall)
+                                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                            }
+                        }
+                        AxisGridLine()
+                            .foregroundStyle(DesignSystem.Colors.borderPrimary)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let label = value.as(String.self) {
+                                Text(label)
+                                    .font(DesignSystem.Typography.caption)
+                                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: CGFloat(max(platforms.count * 44, 100)))
+
+                // Detail rows
+                ForEach(platforms) { platform in
+                    HStack(spacing: DesignSystem.Spacing.sm) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(platform.platform)
+                                .font(DesignSystem.Typography.body)
+                                .fontWeight(.medium)
+                                .foregroundStyle(DesignSystem.Colors.textPrimary)
+
+                            Text("\(platform.saleCount) sales - Avg \(formatCurrency(platform.averageSale))")
+                                .font(DesignSystem.Typography.captionSmall)
+                                .foregroundStyle(DesignSystem.Colors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(formatCurrency(platform.netProfit))
+                                .font(DesignSystem.Typography.body)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(platform.netProfit >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error)
+
+                            Text("Fees: \(formatCurrency(platform.fees))")
+                                .font(DesignSystem.Typography.captionSmall)
+                                .foregroundStyle(DesignSystem.Colors.textTertiary)
+                        }
+                    }
+                    .padding(.vertical, DesignSystem.Spacing.xxxs)
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    // MARK: - Inventory Age Distribution
+
+    private var inventoryAgeSection: some View {
+        let buckets = analyticsService.inventoryAgeBuckets(cards: inventoryCards)
+        let colors: [Color] = [DesignSystem.Colors.success, DesignSystem.Colors.thunderYellow, DesignSystem.Colors.warning, DesignSystem.Colors.error]
+
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            AnalyticsSectionHeader(title: "Inventory Age", subtitle: "Distribution by days in stock")
+
+            if buckets.allSatisfy({ $0.count == 0 }) {
+                Text("Add cards to see age distribution")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 100)
+            } else {
+                Chart(Array(buckets.enumerated()), id: \.offset) { index, bucket in
+                    BarMark(
+                        x: .value("Age", bucket.label),
+                        y: .value("Count", bucket.count)
+                    )
+                    .foregroundStyle(colors[index])
+                    .cornerRadius(4)
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisValueLabel {
+                            if let val = value.as(Int.self) {
+                                Text("\(val)")
+                                    .font(DesignSystem.Typography.captionSmall)
+                                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                            }
+                        }
+                        AxisGridLine()
+                            .foregroundStyle(DesignSystem.Colors.borderPrimary)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let label = value.as(String.self) {
+                                Text(label)
+                                    .font(DesignSystem.Typography.caption)
+                                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 160)
+
+                // Legend
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    ForEach(Array(buckets.enumerated()), id: \.offset) { index, bucket in
+                        HStack(spacing: DesignSystem.Spacing.xxxs) {
+                            Circle()
+                                .fill(colors[index])
+                                .frame(width: 8, height: 8)
+                            Text("\(bucket.label): \(bucket.count)")
+                                .font(DesignSystem.Typography.captionSmall)
+                                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    // MARK: - Period Comparison
+
+    private var periodComparisonSection: some View {
+        let comparison = analyticsService.periodComparison(transactions: transactions, periodDays: 30)
+
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            AnalyticsSectionHeader(title: "Period Comparison", subtitle: "Last 30 days vs previous 30 days")
+
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                // Current Period
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                    Text("This Period")
+                        .font(DesignSystem.Typography.captionBold)
+                        .foregroundStyle(DesignSystem.Colors.cyan)
+
+                    comparisonMetric(label: "Revenue", value: formatCurrency(comparison.currentRevenue))
+                    comparisonMetric(label: "Profit", value: formatCurrency(comparison.currentProfit))
+                    comparisonMetric(label: "Cards Sold", value: "\(comparison.currentCardsSold)")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(DesignSystem.Spacing.sm)
+                .background(DesignSystem.Colors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+
+                // Previous Period
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                    Text("Previous Period")
+                        .font(DesignSystem.Typography.captionBold)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+                    comparisonMetric(label: "Revenue", value: formatCurrency(comparison.previousRevenue))
+                    comparisonMetric(label: "Profit", value: formatCurrency(comparison.previousProfit))
+                    comparisonMetric(label: "Cards Sold", value: "\(comparison.previousCardsSold)")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(DesignSystem.Spacing.sm)
+                .background(DesignSystem.Colors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+            }
+
+            // Change indicators
+            HStack(spacing: DesignSystem.Spacing.lg) {
+                changeIndicator(label: "Revenue", change: comparison.revenueChange)
+                changeIndicator(label: "Profit", change: comparison.profitChange)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    private func comparisonMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(DesignSystem.Typography.captionSmall)
+                .foregroundStyle(DesignSystem.Colors.textTertiary)
+            Text(value)
+                .font(DesignSystem.Typography.body)
+                .fontWeight(.semibold)
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                .monospacedDigit()
+        }
+    }
+
+    private func changeIndicator(label: String, change: Double) -> some View {
+        HStack(spacing: DesignSystem.Spacing.xxxs) {
+            Image(systemName: change >= 0 ? "arrow.up.right" : "arrow.down.right")
+                .font(DesignSystem.Typography.captionSmall)
+            Text("\(label): \(formatPercentage(change))")
+                .font(DesignSystem.Typography.caption)
+                .fontWeight(.semibold)
+        }
+        .foregroundStyle(change >= 0 ? DesignSystem.Colors.success : DesignSystem.Colors.error)
+    }
+
+    // MARK: - Sell-Through Rate Gauge
+
+    private var sellThroughGaugeSection: some View {
+        let rate = analyticsService.sellThroughRate(cards: inventoryCards)
+        let percentage = Int(rate * 100)
+        let gaugeColor: Color = rate > 0.7 ? DesignSystem.Colors.success : rate > 0.4 ? DesignSystem.Colors.thunderYellow : DesignSystem.Colors.warning
+
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            AnalyticsSectionHeader(title: "Sell-Through Rate", subtitle: "Sold / (Sold + Listed)")
+
+            HStack(spacing: DesignSystem.Spacing.lg) {
+                // Circular gauge
+                ZStack {
+                    Circle()
+                        .stroke(DesignSystem.Colors.backgroundTertiary, lineWidth: 12)
+
+                    Circle()
+                        .trim(from: 0, to: rate)
+                        .stroke(gaugeColor, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeInOut(duration: 0.5), value: rate)
+
+                    VStack(spacing: 2) {
+                        Text("\(percentage)%")
+                            .font(DesignSystem.Typography.heading2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                            .monospacedDigit()
+                    }
+                }
+                .frame(width: 120, height: 120)
+
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                    let soldCount = inventoryCards.filter { $0.isSold }.count
+                    let listedCount = inventoryCards.filter { $0.cardStatus == .listed }.count
+
+                    gaugeDetailRow(label: "Sold", value: "\(soldCount)", color: DesignSystem.Colors.success)
+                    gaugeDetailRow(label: "Listed", value: "\(listedCount)", color: DesignSystem.Colors.electricBlue)
+                    gaugeDetailRow(label: "Rate", value: "\(percentage)%", color: gaugeColor)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg))
+    }
+
+    private func gaugeDetailRow(label: String, value: String, color: Color) -> some View {
+        HStack(spacing: DesignSystem.Spacing.xxs) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+
+            Text(label)
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+
+            Spacer()
+
+            Text(value)
+                .font(DesignSystem.Typography.body)
+                .fontWeight(.semibold)
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                .monospacedDigit()
         }
     }
 

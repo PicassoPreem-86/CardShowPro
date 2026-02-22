@@ -8,6 +8,7 @@ public enum TransactionType: String, CaseIterable, Codable, Sendable {
     case sale = "Sale"
     case trade = "Trade"
     case consignment = "Consignment"
+    case refund = "Refund"
 
     public var icon: String {
         switch self {
@@ -15,6 +16,7 @@ public enum TransactionType: String, CaseIterable, Codable, Sendable {
         case .sale: return "dollarsign.circle.fill"
         case .trade: return "arrow.triangle.2.circlepath"
         case .consignment: return "shippingbox.fill"
+        case .refund: return "arrow.uturn.backward.circle.fill"
         }
     }
 
@@ -24,8 +26,38 @@ public enum TransactionType: String, CaseIterable, Codable, Sendable {
         case .sale: return "green"
         case .trade: return "orange"
         case .consignment: return "purple"
+        case .refund: return "red"
         }
     }
+}
+
+// MARK: - Payment Method
+
+public enum PaymentMethod: String, CaseIterable, Codable, Sendable {
+    case cash = "Cash"
+    case venmo = "Venmo"
+    case paypal = "PayPal"
+    case card = "Card"
+    case zelle = "Zelle"
+    case bankTransfer = "Bank Transfer"
+    case applePay = "Apple Pay"
+    case other = "Other"
+
+    public var displayName: String { rawValue }
+}
+
+// MARK: - Transaction Category
+
+public enum TransactionCategory: String, CaseIterable, Codable, Sendable {
+    case retail = "Retail"
+    case wholesale = "Wholesale"
+    case event = "Event"
+    case online = "Online"
+    case trade = "Trade"
+    case consignment = "Consignment"
+    case other = "Other"
+
+    public var displayName: String { rawValue }
 }
 
 // MARK: - Transaction Model
@@ -55,6 +87,15 @@ public final class Transaction {
 
     // Cost basis (acquisition cost of the card)
     public var costBasis: Double
+
+    // Payment & fulfillment
+    public var paymentMethod: String?
+    public var taxAmount: Double = 0
+    public var refundAmount: Double?
+    public var refundDate: Date?
+    public var trackingNumber: String?
+    public var buyerName: String?
+    public var category: String?
 
     public init(
         id: UUID = UUID(),
@@ -162,5 +203,51 @@ public final class Transaction {
             contactName: contactName,
             costBasis: cost
         )
+    }
+
+    public static func recordRefund(
+        for card: InventoryCard,
+        amount: Double,
+        reason: String?,
+        platform: String?
+    ) -> Transaction {
+        let transaction = Transaction(
+            type: .refund,
+            date: Date(),
+            amount: amount,
+            platform: platform,
+            cardId: card.id,
+            cardName: card.cardName,
+            cardSetName: card.setName,
+            costBasis: card.purchaseCost ?? 0
+        )
+        transaction.refundAmount = amount
+        transaction.refundDate = Date()
+        if let reason {
+            transaction.notes = reason
+        }
+        return transaction
+    }
+
+    /// Whether this transaction has been refunded
+    public var isRefunded: Bool {
+        refundDate != nil
+    }
+
+    /// Get the PaymentMethod enum from the stored string
+    public var paymentMethodType: PaymentMethod? {
+        guard let paymentMethod else { return nil }
+        return PaymentMethod(rawValue: paymentMethod)
+    }
+
+    /// Get the TransactionCategory enum from the stored string
+    public var transactionCategory: TransactionCategory? {
+        guard let category else { return nil }
+        return TransactionCategory(rawValue: category)
+    }
+
+    /// Net amount after tax, fees, and shipping
+    public var netAmountAfterTax: Double {
+        amount - platformFees - shippingCost + taxAmount
     }
 }

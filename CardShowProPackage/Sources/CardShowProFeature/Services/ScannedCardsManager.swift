@@ -83,12 +83,33 @@ final class ScannedCardsManager {
         cards.removeAll()
     }
 
-    /// Fetch pricing for a scanned card
+    /// Fetch pricing for a scanned card, populating all variant prices
     private func fetchPricing(for card: ScannedCard, cardID: String) async {
         card.isLoadingPrice = true
         do {
             let (detailed, tcgplayerID) = try await pokemonService.getDetailedPricing(cardID: cardID)
-            let bestVariant = detailed.normal ?? detailed.holofoil ?? detailed.reverseHolofoil
+
+            // Populate all available variant pricing for display
+            var variantPrices: [ScannedCard.VariantPricingInfo] = []
+            if let normal = detailed.normal {
+                variantPrices.append(.init(name: "Normal", market: normal.market, low: normal.low, mid: normal.mid, high: normal.high))
+            }
+            if let holo = detailed.holofoil {
+                variantPrices.append(.init(name: "Holofoil", market: holo.market, low: holo.low, mid: holo.mid, high: holo.high))
+            }
+            if let reverse = detailed.reverseHolofoil {
+                variantPrices.append(.init(name: "Reverse Holo", market: reverse.market, low: reverse.low, mid: reverse.mid, high: reverse.high))
+            }
+            if let first = detailed.firstEdition {
+                variantPrices.append(.init(name: "1st Edition", market: first.market, low: first.low, mid: first.mid, high: first.high))
+            }
+            if let unlimited = detailed.unlimited {
+                variantPrices.append(.init(name: "Unlimited", market: unlimited.market, low: unlimited.low, mid: unlimited.mid, high: unlimited.high))
+            }
+            card.variantPricing = variantPrices
+
+            // Use the best available price as default display
+            let bestVariant = detailed.normal ?? detailed.holofoil ?? detailed.reverseHolofoil ?? detailed.firstEdition ?? detailed.unlimited
             card.marketPrice = bestVariant?.market
             card.displayPrice = bestVariant?.market
 

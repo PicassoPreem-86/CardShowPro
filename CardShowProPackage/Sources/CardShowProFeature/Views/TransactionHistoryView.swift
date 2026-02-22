@@ -15,6 +15,7 @@ struct TransactionHistoryView: View {
         case purchases = "Purchases"
         case sales = "Sales"
         case trades = "Trades"
+        case refunds = "Refunds"
     }
 
     enum PeriodFilter: String, CaseIterable {
@@ -39,6 +40,8 @@ struct TransactionHistoryView: View {
             result = result.filter { $0.transactionType == .sale }
         case .trades:
             result = result.filter { $0.transactionType == .trade || $0.transactionType == .consignment }
+        case .refunds:
+            result = result.filter { $0.transactionType == .refund }
         }
 
         // Period filter
@@ -81,8 +84,14 @@ struct TransactionHistoryView: View {
             .reduce(0) { $0 + $1.amount }
     }
 
+    private var totalRefunds: Double {
+        filteredTransactions
+            .filter { $0.transactionType == .refund }
+            .reduce(0) { $0 + $1.amount }
+    }
+
     private var netProfit: Double {
-        totalRevenue - totalSpent
+        totalRevenue - totalSpent - totalRefunds
     }
 
     private var transactionCount: Int {

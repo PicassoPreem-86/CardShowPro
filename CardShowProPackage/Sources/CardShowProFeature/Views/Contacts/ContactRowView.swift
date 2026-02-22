@@ -49,11 +49,39 @@ struct ContactRowView: View {
 
             Spacer()
 
-            // Spending tier badge for customers
-            if contact.contactTypeEnum == .customer, let tier = contact.spendingTierEnum {
-                Image(systemName: tier.icon)
-                    .font(.caption)
-                    .foregroundStyle(tier.color)
+            VStack(alignment: .trailing, spacing: DesignSystem.Spacing.xxxs) {
+                // Follow-up badge
+                if contact.isFollowUpOverdue {
+                    HStack(spacing: 2) {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 10))
+                        Text("Follow-up")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(DesignSystem.Colors.warning)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(DesignSystem.Colors.warning.opacity(0.15))
+                    .clipShape(Capsule())
+                }
+
+                // Rating stars
+                if let rating = contact.rating, rating > 0 {
+                    HStack(spacing: 1) {
+                        ForEach(1...5, id: \.self) { star in
+                            Image(systemName: star <= rating ? "star.fill" : "star")
+                                .font(.system(size: 8))
+                                .foregroundStyle(star <= rating ? DesignSystem.Colors.thunderYellow : DesignSystem.Colors.textDisabled)
+                        }
+                    }
+                }
+
+                // Spending tier badge for customers
+                if contact.contactTypeEnum == .customer, let tier = contact.spendingTierEnum {
+                    Image(systemName: tier.icon)
+                        .font(.caption)
+                        .foregroundStyle(tier.color)
+                }
             }
 
             // Chevron

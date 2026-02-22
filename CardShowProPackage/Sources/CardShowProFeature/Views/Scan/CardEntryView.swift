@@ -152,6 +152,9 @@ struct CardEntryView: View {
             confidence: 1.0 // Manual entry = 100% confidence
         )
 
+        // Map scan-flow variant to inventory variant
+        newCard.variant = state.selectedVariant.toInventoryVariant().rawValue
+
         // Save to SwiftData
         modelContext.insert(newCard)
 
